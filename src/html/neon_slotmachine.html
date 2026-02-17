@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON SLOT MANIA - VEGAS EDITION</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+KR:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-purple: #bc13fe;
+            --neon-red: #ff0044;
+            --neon-gold: #ffcc00;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            background: radial-gradient(circle at center, #0a0a1a 0%, #000000 100%);
+            font-family: 'Noto Sans KR', sans-serif;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* Glassmorphism Panel */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 1);
+        }
+
+        .neon-text-blue { color: var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); }
+        .neon-text-pink { color: var(--neon-pink); text-shadow: 0 0 10px var(--neon-pink); }
+        .neon-text-red { color: var(--neon-red); text-shadow: 0 0 10px var(--neon-red); }
+        .neon-text-gold { color: var(--neon-gold); text-shadow: 0 0 10px var(--neon-gold); }
+        
+        /* Slot Grid */
+        .slot-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .slot-cell {
+            width: 100px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            position: relative;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* Animations for Winning/Losing */
+        .slot-cell.winning {
+            background: rgba(255, 0, 255, 0.3);
+            border-color: var(--neon-pink);
+            box-shadow: 0 0 30px var(--neon-pink);
+            transform: scale(1.1);
+            z-index: 10;
+        }
+
+        .slot-cell.losing {
+            background: rgba(255, 0, 68, 0.3);
+            border-color: var(--neon-red);
+            box-shadow: 0 0 30px var(--neon-red);
+            transform: scale(0.95);
+        }
+
+        .multiplier-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: var(--neon-blue);
+            color: black;
+            font-weight: bold;
+        }
+
+        .symbol-icon {
+            font-size: 44px;
+            filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+        }
+
+        /* Buttons */
+        .control-btn {
+            background: linear-gradient(45deg, var(--neon-blue), var(--neon-purple));
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .control-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.8);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.3;
+            filter: grayscale(1);
+        }
+
+        .input-dark {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 6px;
+            border-radius: 8px;
+            width: 100%;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        /* Visual Effects */
+        @keyframes spin {
+            0% { transform: translateY(-5px); }
+            100% { transform: translateY(5px); }
+        }
+        .spinning { animation: spin 0.05s infinite alternate; }
+
+        @keyframes screen-shake {
+            0% { transform: translate(0,0); }
+            25% { transform: translate(6px, 6px); }
+            50% { transform: translate(-6px, 0px); }
+            100% { transform: translate(0,0); }
+        }
+        .shake { animation: screen-shake 0.1s 8; }
+
+        @keyframes dim-screen {
+            0%, 100% { background: transparent; }
+            50% { background: rgba(255, 0, 0, 0.2); }
+        }
+        .bg-dim { animation: dim-screen 0.3s 2; }
+
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--neon-blue);
+            box-shadow: 0 0 10px var(--neon-blue);
+            transition: width 0.3s ease;
+        }
+
+        .message-toast {
+            position: fixed;
+            top: 25%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 50px;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 24px;
+            display: none;
+            z-index: 100;
+            pointer-events: none;
+            text-transform: uppercase;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container" class="container max-w-2xl px-4 py-8 relative">
+        <!-- Header: Balance, Stage, Progress -->
+        <div class="glass-panel p-6 mb-6 border-b-2 border-cyan-500/30">
+            <div class="flex flex-wrap justify-between items-end gap-4">
+                <div>
+                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Current Stage</h2>
+                    <div id="stage-display" class="orbitron text-2xl neon-text-blue font-bold">STAGE 1</div>
+                </div>
+                <div class="text-center">
+                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Balance</h2>
+                    <div id="money-display" class="orbitron text-4xl font-bold neon-text-pink">$100</div>
+                </div>
+                <div class="text-right min-w-[150px]">
+                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Stage Progress</h2>
+                    <div id="target-display" class="orbitron text-xl text-yellow-400 font-bold">$0 / $1,000</div>
+                    <div class="progress-container">
+                        <div id="stage-progress" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <!-- Sidebar: Controls & Info -->
+            <div class="md:col-span-4 glass-panel p-4 flex flex-col gap-4">
+                <div class="text-center">
+                    <h3 class="orbitron text-xs text-cyan-400 mb-2">Multipliers (1-10)</h3>
+                    <div class="grid grid-cols-3 gap-2" id="multiplier-inputs"></div>
+                </div>
+
+                <div class="border-t border-white/10 pt-4">
+                    <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                        <span>Base Bet</span>
+                        <span id="base-bet-val" class="text-cyan-400">$10</span>
+                    </div>
+                    <div class="flex justify-between text-[11px] font-bold">
+                        <span>SPIN COST</span>
+                        <span id="total-cost-val" class="text-pink-500">$10</span>
+                    </div>
+                </div>
+
+                <div class="text-[9px] text-gray-500 space-y-1 bg-black/40 p-2 rounded">
+                    <p class="text-white/70 font-bold mb-1 underline">PAYOUTS</p>
+                    <p>• 🍎/🍋/🍒: 2 pts | 🔔: 5 pts | 7️⃣: 10 pts</p>
+                    <p class="text-red-400 font-bold">• 💀 해골: -3 pts (최대 5개)</p>
+                    <div class="mt-2 py-1 px-2 border border-dashed border-cyan-800 rounded">
+                        <p class="text-cyan-400 font-bold" id="luck-desc">리스크 분석: 보통</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main: Slot Machine -->
+            <div class="md:col-span-8 glass-panel p-8 flex flex-col items-center relative overflow-hidden">
+                <div class="slot-grid mb-8" id="game-grid"></div>
+
+                <div class="flex flex-col items-center gap-4 w-full">
+                    <button id="spin-btn" class="control-btn w-full text-xl orbitron py-4">SPIN</button>
+                    <div id="status-msg" class="text-center h-6 text-sm orbitron text-cyan-400">READY</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Toast -->
+    <div id="toast" class="message-toast orbitron"></div>
+
+    <!-- Game Over / Stage Clear Overlay -->
+    <div id="overlay" class="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center hidden z-50">
+        <div class="glass-panel p-10 text-center border-2 border-cyan-500 max-w-sm mx-4">
+            <h2 id="overlay-title" class="orbitron text-4xl mb-4 neon-text-blue">GAME OVER</h2>
+            <p id="overlay-msg" class="mb-8 text-gray-300">자금이 부족합니다.</p>
+            <button id="overlay-btn" class="control-btn px-10 py-3">RETRY</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const SYMBOLS = ['🍎', '🍋', '🍒', '🔔', '7️⃣', '💀'];
+        const SYMBOL_SCORES = { '🍎': 2, '🍋': 2, '🍒': 2, '🔔': 5, '7️⃣': 10, '💀': -3 };
+        const BINGO_LINES = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+            [0, 4, 8], [2, 4, 6]             // Diagonals
+        ];
+
+        // --- Game State ---
+        let state = {
+            money: 100,
+            stage: 1,
+            target: 1000,
+            stageEarned: 0,
+            baseBet: 10,
+            isSpinning: false,
+            isStageCleared: false,
+            isBingoOccurredThisStage: false, 
+            isSkullBingoOccurred: false, 
+            multipliers: Array(9).fill(1),
+            currentSlots: Array(9).fill('❓')
+        };
+
+        const elements = {
+            stage: document.getElementById('stage-display'),
+            money: document.getElementById('money-display'),
+            target: document.getElementById('target-display'),
+            progress: document.getElementById('stage-progress'),
+            multInputs: document.getElementById('multiplier-inputs'),
+            gameGrid: document.getElementById('game-grid'),
+            spinBtn: document.getElementById('spin-btn'),
+            baseBetVal: document.getElementById('base-bet-val'),
+            totalCostVal: document.getElementById('total-cost-val'),
+            statusMsg: document.getElementById('status-msg'),
+            luckDesc: document.getElementById('luck-desc'),
+            toast: document.getElementById('toast'),
+            overlay: document.getElementById('overlay'),
+            overlayTitle: document.getElementById('overlay-title'),
+            overlayMsg: document.getElementById('overlay-msg'),
+            overlayBtn: document.getElementById('overlay-btn'),
+            container: document.getElementById('game-container')
+        };
+
+        // --- Initialization ---
+        function init() {
+            state.baseBet = Math.max(1, Math.floor(state.stage * 10)); 
+            state.target = state.stage * 500;
+            state.stageEarned = 0;
+            state.isStageCleared = false;
+            state.isBingoOccurredThisStage = false; 
+            state.isSkullBingoOccurred = false; 
+            
+            updateLuckDescription();
+
+            // Multiplier inputs generation
+            elements.multInputs.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.step = '1';
+                input.min = '1';
+                input.max = '10';
+                input.value = state.multipliers[i] || 1;
+                input.className = 'input-dark orbitron';
+                input.oninput = (e) => updateMultiplier(i, e.target.value);
+                elements.multInputs.appendChild(input);
+            }
+
+            // Slot grid generation
+            elements.gameGrid.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'slot-cell';
+                cell.id = `cell-${i}`;
+                cell.innerHTML = `
+                    <div class="multiplier-badge">x${state.multipliers[i]}</div>
+                    <div class="symbol-icon">${state.currentSlots[i]}</div>
+                `;
+                elements.gameGrid.appendChild(cell);
+            }
+            updateDisplays();
+        }
+
+        // --- Core Logic Functions ---
+
+        function updateMultiplier(index, value) {
+            let val = Math.floor(parseFloat(value)) || 1;
+            if (val < 1) val = 1;
+            if (val > 10) val = 10;
+            
+            state.multipliers[index] = val;
+            const badge = document.querySelector(`#cell-${index} .multiplier-badge`);
+            if (badge) badge.textContent = `x${val}`;
+            updateDisplays();
+            updateLuckDescription();
+        }
+
+        function resetMultipliersToMinimum() {
+            state.multipliers = Array(9).fill(1);
+            const inputs = elements.multInputs.querySelectorAll('input');
+            inputs.forEach(input => input.value = 1);
+            for (let i = 0; i < 9; i++) {
+                const badge = document.querySelector(`#cell-${i} .multiplier-badge`);
+                if (badge) badge.textContent = `x1`;
+            }
+            showToast("자금이 부족하여 배수를 초기화합니다", "var(--neon-blue)");
+            updateDisplays();
+            updateLuckDescription();
+        }
+
+        function calculateTotalCost() {
+            let extraCost = 0;
+            state.multipliers.forEach(m => { if (m > 1) extraCost += (m - 1) * state.baseBet; });
+            return Math.floor(state.baseBet + extraCost);
+        }
+
+        function updateLuckDescription() {
+            const totalMult = state.multipliers.reduce((a, b) => a + b, 0);
+            const riskLevel = totalMult / 90;
+
+            if (state.isSkullBingoOccurred) {
+                if (riskLevel > 0.6) {
+                    elements.luckDesc.textContent = "복구 모드: 고베팅 리스크 감지!";
+                    elements.luckDesc.className = "text-orange-400 font-bold";
+                } else {
+                    elements.luckDesc.textContent = "복구 모드: 안전 보상 가동 중";
+                    elements.luckDesc.className = "text-yellow-400 font-bold";
+                }
+            } else {
+                if (riskLevel > 0.8) {
+                    elements.luckDesc.textContent = "리스크 분석: 매우 높음 (💀UP)";
+                    elements.luckDesc.className = "text-red-500 font-bold";
+                } else if (riskLevel > 0.4) {
+                    elements.luckDesc.textContent = "리스크 분석: 보통";
+                    elements.luckDesc.className = "text-cyan-400 font-bold";
+                } else {
+                    elements.luckDesc.textContent = "리스크 분석: 안전";
+                    elements.luckDesc.className = "text-blue-400 font-bold";
+                }
+            }
+        }
+
+        function getWeightedSymbol(currentSkullCount) {
+            const progress = state.stageEarned / state.target;
+            const totalMult = state.multipliers.reduce((a, b) => a + b, 0);
+            const betWeightFactor = (totalMult - 9) / 81; 
+
+            let weights = { '🍎': 20, '🍋': 20, '🍒': 20, '🔔': 15, '7️⃣': 5, '💀': 20 };
+            weights['💀'] += (betWeightFactor * 30) - 10;
+
+            if (state.isSkullBingoOccurred) {
+                // Recovery Mode Logic
+                const recoveryBaseSkull = 2;
+                const riskPenaltySkull = betWeightFactor * 15; 
+                weights['💀'] = recoveryBaseSkull + riskPenaltySkull; 
+                weights['🍎'] = 45; weights['🍋'] = 45; weights['🍒'] = 45;
+                weights['🔔'] = 20; weights['7️⃣'] = 10;
+            } else {
+                if (state.isBingoOccurredThisStage) {
+                    weights['🍎'] *= 0.6; weights['🍋'] *= 0.6; weights['🍒'] *= 0.6;
+                }
+                if (progress > 0.75) {
+                    weights['💀'] += 10 + (betWeightFactor * 20);
+                }
+            }
+
+            if (currentSkullCount >= 5) weights['💀'] = 0;
+            if (weights['💀'] < 1) weights['💀'] = 1;
+
+            const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (let symbol in weights) {
+                if (random < weights[symbol]) return symbol;
+                random -= weights[symbol];
+            }
+            return '🍎';
+        }
+
+        function updateDisplays() {
+            const currentCost = calculateTotalCost();
+            const minBet = state.baseBet;
+
+            elements.stage.textContent = `STAGE ${state.stage}`;
+            elements.money.textContent = `$${Math.floor(state.money).toLocaleString()}`;
+            elements.target.textContent = `$${Math.floor(state.stageEarned).toLocaleString()} / $${state.target.toLocaleString()}`;
+            
+            const progressPercent = Math.min(100, (state.stageEarned / state.target) * 100);
+            elements.progress.style.width = `${progressPercent}%`;
+            elements.baseBetVal.textContent = `$${state.baseBet}`;
+            elements.totalCostVal.textContent = `$${currentCost}`;
+
+            // Safety check for Game Over
+            if (state.money < minBet && !state.isSpinning) {
+                elements.spinBtn.disabled = true;
+                elements.statusMsg.textContent = "GAME OVER";
+                showOverlay("GAME OVER", "자금이 부족하여 더 이상 게임을 지속할 수 없습니다.", "RETRY");
+                return;
+            }
+
+            // Safety Reset trigger
+            if (state.money < currentCost && !state.isSpinning) {
+                if (state.money >= minBet) {
+                    resetMultipliersToMinimum();
+                } else {
+                    elements.spinBtn.disabled = true;
+                    elements.statusMsg.textContent = "NEED MORE MONEY";
+                }
+            } else {
+                elements.spinBtn.disabled = state.isSpinning;
+                if (!state.isSpinning) elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY READY" : "READY";
+            }
+
+            // Stage Clear trigger
+            if (state.stageEarned >= state.target && !state.isSpinning && !state.isStageCleared) {
+                state.isStageCleared = true;
+                showOverlay("STAGE CLEAR", "목표 금액을 달성했습니다!", "NEXT STAGE");
+            }
+        }
+
+        async function updateMoneyAnimated(wonAmount) {
+            return new Promise(resolve => {
+                const startMoney = state.money;
+                const startStageEarned = state.stageEarned;
+                let current = 0;
+                const isLoss = wonAmount < 0;
+                const absWon = Math.max(1, Math.abs(wonAmount));
+
+                function animate() {
+                    const progress = current / absWon;
+                    let step = Math.max(1, Math.floor(absWon * 0.1 * (progress + 0.1)));
+                    current += step;
+
+                    if (current >= absWon) {
+                        state.money = startMoney + wonAmount;
+                        state.stageEarned = Math.max(0, startStageEarned + wonAmount);
+                        updateDisplays();
+                        resolve();
+                    } else {
+                        const tick = isLoss ? -current : current;
+                        state.money = startMoney + tick;
+                        state.stageEarned = Math.max(0, startStageEarned + tick);
+                        updateDisplays();
+                        requestAnimationFrame(animate);
+                    }
+                }
+                requestAnimationFrame(animate);
+            });
+        }
+
+        async function spin() {
+            const cost = calculateTotalCost();
+            if (state.money < cost) return;
+
+            state.isSpinning = true;
+            state.money -= cost;
+            updateDisplays();
+            
+            elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY SPINNING..." : "SPINNING...";
+
+            // Visual spin start
+            const cells = document.querySelectorAll('.slot-cell');
+            cells.forEach(c => {
+                c.classList.remove('winning', 'losing');
+                c.querySelector('.symbol-icon').classList.add('spinning');
+            });
+
+            setTimeout(async () => {
+                const results = [];
+                let skullCount = 0;
+                for (let i = 0; i < 9; i++) {
+                    const symbol = getWeightedSymbol(skullCount);
+                    if (symbol === '💀') skullCount++;
+                    results.push(symbol);
+                    const cell = document.getElementById(`cell-${i}`);
+                    cell.querySelector('.symbol-icon').textContent = symbol;
+                    cell.querySelector('.symbol-icon').classList.remove('spinning');
+                }
+                state.currentSlots = results;
+                
+                // Settlement
+                await checkWins();
+                
+                state.isSpinning = false;
+                updateDisplays();
+            }, 800);
+        }
+
+        async function checkWins() {
+            let totalDelta = 0;
+            let winningLines = [];
+            let losingLines = [];
+            let skullBingoFound = false;
+            let regularBingoFound = false;
+
+            BINGO_LINES.forEach(line => {
+                const [a, b, c] = line;
+                if (state.currentSlots[a] !== '❓' && 
+                    state.currentSlots[a] === state.currentSlots[b] && 
+                    state.currentSlots[b] === state.currentSlots[c]) {
+                    
+                    const symbol = state.currentSlots[a];
+                    const baseScore = SYMBOL_SCORES[symbol];
+                    const lineMultiplier = state.multipliers[line[0]] + state.multipliers[line[1]] + state.multipliers[line[2]];
+                    const delta = Math.floor(baseScore * state.baseBet * lineMultiplier);
+                    
+                    totalDelta += delta;
+                    if (symbol === '💀') {
+                        skullBingoFound = true; losingLines.push(line);
+                    } else {
+                        regularBingoFound = true; winningLines.push(line);
+                    }
+                }
+            });
+
+            if (skullBingoFound || regularBingoFound) {
+                state.isBingoOccurredThisStage = true;
+                if (skullBingoFound) {
+                    state.isSkullBingoOccurred = true; 
+                    updateLuckDescription();
+                }
+
+                if (totalDelta > 0) {
+                    elements.container.classList.add('shake');
+                    showToast(`WIN +$${totalDelta}`, 'var(--neon-pink)');
+                    winningLines.flat().forEach(idx => document.getElementById(`cell-${idx}`).classList.add('winning'));
+                } else if (totalDelta < 0) {
+                    elements.container.classList.add('bg-dim');
+                    showToast(`LOSS $${Math.abs(totalDelta)}`, 'var(--neon-red)');
+                    losingLines.flat().forEach(idx => document.getElementById(`cell-${idx}`).classList.add('losing'));
+                }
+                
+                setTimeout(() => { elements.container.classList.remove('shake', 'bg-dim'); }, 800);
+                await updateMoneyAnimated(totalDelta);
+            }
+        }
+
+        // --- Utility UI ---
+
+        function showToast(msg, color) {
+            elements.toast.textContent = msg;
+            elements.toast.style.background = color;
+            elements.toast.style.boxShadow = `0 0 50px ${color}`;
+            elements.toast.style.display = 'block';
+            setTimeout(() => elements.toast.style.display = 'none', 1500);
+        }
+
+        function showOverlay(title, msg, btnText) {
+            elements.overlayTitle.textContent = title;
+            elements.overlayMsg.textContent = msg;
+            elements.overlayBtn.textContent = btnText;
+            elements.overlay.classList.remove('hidden');
+        }
+
+        elements.overlayBtn.onclick = () => {
+            if (elements.overlayBtn.textContent === "RETRY") {
+                state.money = 100; state.stage = 1;
+                state.currentSlots = Array(9).fill('❓');
+            } else {
+                state.stage++;
+                state.currentSlots = Array(9).fill('❓');
+            }
+            elements.overlay.classList.add('hidden');
+            init();
+        };
+
+        elements.spinBtn.onclick = spin;
+
+        // --- Start Game ---
+        window.onload = init;
+    </script>
+</body>
+</html>

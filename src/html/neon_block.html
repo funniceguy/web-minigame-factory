@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Glass Block Breaker - Final</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+KR:wght@300;500;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1a1c2c 0%, #0a0b10 100%);
+            font-family: 'Orbitron', 'Noto Sans KR', sans-serif;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            touch-action: none;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 450px;
+            height: 750px;
+            max-width: 95vw;
+            max-height: 95vh;
+        }
+
+        canvas {
+            border-radius: 24px 24px 0 0;
+            width: 100%;
+            flex-grow: 1;
+            cursor: none;
+        }
+
+        .neon-text {
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.8), 0 0 20px rgba(0, 242, 255, 0.5);
+        }
+
+        .score-box {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+        }
+
+        /* Timer UI */
+        #timer-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffaa00;
+            text-shadow: 0 0 10px rgba(255, 170, 0, 0.6);
+            pointer-events: none;
+        }
+        .timer-warning {
+            color: #ff3333 !important;
+            text-shadow: 0 0 10px rgba(255, 51, 51, 0.8) !important;
+            animation: blink 0.5s infinite alternate;
+        }
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.3; } }
+
+        /* Pause Button */
+        #pause-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 40;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+
+        #pause-btn:hover {
+            background: rgba(0, 242, 255, 0.2);
+            border-color: #00f2ff;
+        }
+
+        /* AI Commentary Box */
+        #ai-commentary {
+            min-height: 60px;
+            background: rgba(0, 0, 0, 0.6);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 15px;
+            font-size: 0.85rem;
+            color: #00f2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 20;
+        }
+
+        /* Overlay & Cards */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 30;
+            transition: opacity 0.3s ease;
+        }
+
+        .card-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 400px;
+        }
+
+        .card {
+            width: 100px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .card:hover {
+            transform: translateY(-5px) scale(1.05);
+            background: rgba(0, 242, 255, 0.15);
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
+            border-color: #00f2ff;
+        }
+
+        .card-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 4px;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        .card-desc {
+            font-size: 0.6rem;
+            color: #ccc;
+            line-height: 1.2;
+            font-family: 'Noto Sans KR', sans-serif;
+            word-break: keep-all;
+        }
+
+        .btn-action {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #00f2ff, #0072ff);
+            border: none;
+            border-radius: 50px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 10px;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+            min-width: 160px;
+        }
+
+        .btn-action:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.6);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #00f2ff;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container" class="glass-panel">
+        <div id="timer-display">03:00</div>
+        <button id="pause-btn">⏸️</button>
+
+        <div class="score-box">
+            <div class="text-[10px] uppercase tracking-widest opacity-70">Stage <span id="level-display">1</span></div>
+            <div id="score" class="text-4xl font-bold neon-text">0</div>
+            <div class="flex justify-between w-full px-8 mt-2">
+                <div class="text-xs opacity-60">HIGH: <span id="high-score">0</span></div>
+                <div class="text-xs opacity-60">BALLS: <span id="ball-count">1</span></div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ai-commentary">
+            <span id="ai-text">✨ 시스템 로딩 완료...</span>
+        </div>
+
+        <div id="overlay">
+            <div id="title-section" class="text-center">
+                <h1 id="title-text" class="text-3xl mb-2 neon-text font-bold">NEON BLOCK<br>EVOLUTION</h1>
+                <p id="subtitle-text" class="text-xs opacity-70 mb-6">Time Attack & Infinite Growth</p>
+            </div>
+            
+            <div id="card-selection" class="hidden flex-col items-center w-full px-4">
+                <h2 id="card-title" class="text-xl text-cyan-300 font-bold mb-2">STAGE CLEARED!</h2>
+                <p id="card-subtitle" class="text-xs text-gray-300 mb-4">전리품을 선택하여 장비를 강화하세요</p>
+                <div class="card-container" id="cards-container"></div>
+            </div>
+
+            <div class="flex flex-col items-center">
+                <button id="resume-btn" class="btn-action hidden">RESUME</button>
+                <button id="start-btn" class="btn-action">GAME START</button>
+                <button id="quit-btn" class="btn-action btn-secondary hidden">QUIT TO MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = ""; // Runtime key
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId;
+        
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            if(!container) return;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight - 60; 
+        }
+
+        const defaultUpgrades = {
+            paddleWidth: 100,
+            ballSpeedMult: 1.0,
+            ballDamage: 1.0,   
+            bulletDamage: 0.5, 
+            extraBalls: 0,
+            gunsLevel: 0,     
+            homing: false,
+            fireRate: 60,     
+            explosiveLevel: 0, // Level 0 to 10
+            shield: false     
+        };
+
+        let gameState = {
+            running: false,
+            score: 0,
+            level: 1,
+            highScore: parseInt(localStorage.getItem('evo-high-score')) || 0,
+            combo: 0,
+            lastComboTime: 0,
+            state: 'START', 
+            prevState: 'START',
+            itemSelectionType: 'LEVEL_CLEAR',
+            timeLeft: 0, 
+            timeScale: 1.0 
+        };
+
+        let upgrades = { ...defaultUpgrades };
+
+        let paddle = { x: 0, y: 0, height: 12, color: '#00f2ff', speed: 8 };
+        let shieldActive = false;
+        let balls = [];
+        let bullets = [];
+        let blocks = [];
+        let particles = [];
+        let gameFrame = 0; 
+        
+        const cardsDB = [
+            { id: 'multiball', title: '멀티 볼', desc: '공 추가 (무제한)', icon: '⚽', type: 'ball' },
+            { id: 'power_ball', title: '파워 볼', desc: '공 데미지 +50%', icon: '💪', type: 'ball' },
+            { id: 'wide_paddle', title: '와이드 패들', desc: '패들 길이 증가', icon: '📏', type: 'paddle' },
+            { id: 'blaster_count', title: '오토 건', desc: '총알 개수 추가 (최대 25발)', icon: '🔫', type: 'weapon' },
+            { id: 'blaster_dmg', title: '헤비 불렛', desc: '총알 데미지 +50%', icon: '💣', type: 'weapon', req: 'gun_active' },
+            { id: 'blaster_rate', title: '래피드 파이어', desc: '발사 속도 증가', icon: '⚡', type: 'weapon', req: 'gun_active' },
+            { id: 'homing', title: '유도 시스템', desc: '총알 유도 기능 탑재', icon: '🎯', type: 'weapon', req: 'gun_active' },
+            { id: 'explosive', title: '폭발 탄', desc: '공 타격 시 광역 피해 (최대 10배)', icon: '💥', type: 'ball' },
+            { id: 'shield', title: '에너지 쉴드', desc: '방어막 즉시 충전', icon: '🛡️', type: 'defense' }
+        ];
+
+        const scoreEl = document.getElementById('score');
+        const ballCountEl = document.getElementById('ball-count');
+        const levelEl = document.getElementById('level-display');
+        const highScoreEl = document.getElementById('high-score');
+        const timerEl = document.getElementById('timer-display');
+        const overlay = document.getElementById('overlay');
+        const titleSection = document.getElementById('title-section');
+        const cardSection = document.getElementById('card-selection');
+        const cardsContainer = document.getElementById('cards-container');
+        const startBtn = document.getElementById('start-btn');
+        const resumeBtn = document.getElementById('resume-btn');
+        const quitBtn = document.getElementById('quit-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const aiTextEl = document.getElementById('ai-text');
+        const titleText = document.getElementById('title-text');
+        const subtitleText = document.getElementById('subtitle-text');
+        const cardTitle = document.getElementById('card-title');
+        const cardSubtitle = document.getElementById('card-subtitle');
+
+        highScoreEl.innerText = gameState.highScore;
+
+        let lastAiCallTime = 0;
+        async function callGemini(prompt, system) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        systemInstruction: { parts: [{ text: system }] }
+                    })
+                });
+                const data = await res.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text;
+            } catch (e) { return null; }
+        }
+
+        async function updateAiCommentary(trigger, urgent=false) {
+            const now = Date.now();
+            if(!urgent && now - lastAiCallTime < 8000) return;
+            lastAiCallTime = now;
+            aiTextEl.innerHTML = '<span class="loader"></span>';
+            const prompt = `게임 상황: ${trigger}. 점수: ${gameState.score}, 스테이지: ${gameState.level}, 남은시간: ${Math.floor(gameState.timeLeft)}초. 15자 이내의 짧고 강렬한 한국어 중계 멘트(반말).`;
+            const text = await callGemini(prompt, "열정적인 e스포츠 캐스터입니다.");
+            if(text) aiTextEl.innerText = text;
+        }
+
+        function getStageTimeLimit(level) {
+            if (level <= 5) return 120;
+            if (level <= 10) return 90;
+            if (level <= 15) return 60;
+            if (level <= 20) return 30;
+            if (level <= 30) return 25;
+            if (level <= 40) return 20;
+            if (level <= 50) return 15;
+            if (level <= 60) return 12;
+            if (level <= 70) return 10;
+            if (level <= 80) return 7;
+            if (level <= 100) return 5;
+            return 3;
+        }
+
+        function updateTimer(dt) {
+            if (gameState.state !== 'PLAYING') return;
+            gameState.timeLeft -= dt * gameState.timeScale;
+            if (gameState.timeLeft <= 0) {
+                gameState.timeLeft = 0;
+                gameOver(true);
+            }
+            const m = Math.floor(gameState.timeLeft / 60);
+            const s = Math.floor(gameState.timeLeft % 60);
+            timerEl.innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            if (gameState.timeLeft <= 10) timerEl.classList.add('timer-warning');
+            else timerEl.classList.remove('timer-warning');
+        }
+
+        function generateBlock(x, y, w, h, color, maxHp, type='static', moveParams={}) {
+            return { x, y, w, h, color, hp: maxHp, maxHp: maxHp, type, moveParams, origX: x, origY: y, isSpecial: false };
+        }
+
+        function getStageHp(level) {
+            let hp = 1.0;
+            for(let i = 1; i < level; i++) {
+                if (i % 5 === 4) hp *= 1.5;
+                else hp *= 1.1;
+            }
+            return hp; 
+        }
+
+        function initLevel() {
+            blocks = [];
+            const pattern = (gameState.level - 1) % 5; 
+            const baseHp = getStageHp(gameState.level);
+            gameState.timeLeft = getStageTimeLimit(gameState.level);
+            
+            const colors = ['#ff00ff', '#00f2ff', '#00ff00', '#ffff00', '#ff5500'];
+            const cols = 8;
+            const rows = 9;
+            const padding = 6;
+            const offsetTop = 60;
+            const offsetLeft = 10;
+            const blockWidth = (canvas.width - (offsetLeft * 2) - (padding * (cols - 1))) / cols;
+            const blockHeight = 18;
+
+            let tempBlocks = [];
+            
+            if (pattern === 0) {
+                for(let c=0; c<cols; c++) for(let r=0; r<6; r++) tempBlocks.push(generateBlock((c*(blockWidth+padding))+offsetLeft, (r*(blockHeight+padding))+offsetTop, blockWidth, blockHeight, colors[r%colors.length], baseHp));
+            } else if (pattern === 1) {
+                const centerX = cols/2-0.5, centerY = rows/2-2;
+                for(let c=0; c<cols; c++) for(let r=0; r<rows; r++) if(Math.abs(c-centerX)+Math.abs(r-centerY)<4) tempBlocks.push(generateBlock((c*(blockWidth+padding))+offsetLeft, (r*(blockHeight+padding))+offsetTop, blockWidth, blockHeight, colors[(c+r)%colors.length], baseHp*1.2));
+            } else if (pattern === 2) {
+                for(let r=0; r<7; r++) { const speed = (r%2===0?1:-1)*(0.5+(gameState.level*0.1)); for(let c=1; c<cols-1; c++) tempBlocks.push(generateBlock((c*(blockWidth+padding))+offsetLeft, (r*(blockHeight+padding))+offsetTop, blockWidth, blockHeight, colors[r%colors.length], baseHp, 'horizontal', {speed, minX:10, maxX:canvas.width-10-blockWidth})); }
+            } else if (pattern === 3) {
+                const cx = canvas.width/2, cy = offsetTop+150, radius = 120;
+                tempBlocks.push(generateBlock(cx-30, cy-30, 60, 60, '#fff', baseHp*5, 'static'));
+                for(let i=0; i<20; i++) { const a = (Math.PI*2/20)*i; tempBlocks.push(generateBlock(cx+Math.cos(a)*radius-(blockWidth/2), cy+Math.sin(a)*radius-(blockHeight/2), blockWidth, blockHeight, colors[i%colors.length], baseHp*1.5)); }
+                for(let i=0; i<10; i++) { const a = (Math.PI*2/10)*i; tempBlocks.push(generateBlock(cx+Math.cos(a)*(radius/2)-(blockWidth/2), cy+Math.sin(a)*(radius/2)-(blockHeight/2), blockWidth, blockHeight, colors[i%colors.length], baseHp)); }
+            } else {
+                const cx = canvas.width/2, cy = offsetTop+120;
+                for(let l=1; l<=3; l++) { const r=l*50, c=l*6, s=(l%2===0?0.02:-0.02); for(let i=0; i<c; i++) { const a = (Math.PI*2/c)*i; tempBlocks.push(generateBlock(0,0, blockWidth*0.8, blockHeight*0.8, colors[l], baseHp*1.5, 'orbit', {cx,cy,radius:r,angle:a,speed:s})); }}
+            }
+
+            const indices = Array.from({length: tempBlocks.length}, (_, i) => i);
+            for (let i = 0; i < 3; i++) {
+                if (indices.length === 0) break;
+                const rnd = Math.floor(Math.random() * indices.length);
+                const idx = indices.splice(rnd, 1)[0];
+                tempBlocks[idx].isSpecial = true;
+                tempBlocks[idx].color = '#FFD700'; 
+                tempBlocks[idx].maxHp = baseHp * 2; 
+                tempBlocks[idx].hp = tempBlocks[idx].maxHp;
+            }
+            blocks = tempBlocks;
+        }
+
+        function spawnBalls() {
+            balls = [];
+            const count = 1 + upgrades.extraBalls;
+            for(let i=0; i<count; i++) {
+                const offset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i/2) * 4;
+                balls.push({
+                    x: canvas.width / 2 + offset,
+                    y: canvas.height - 40 - (i*6), 
+                    radius: 6,
+                    dx: 0, dy: 0,
+                    active: false,
+                    isDead: false, 
+                    color: '#fff'
+                });
+            }
+            ballCountEl.innerText = balls.length;
+        }
+
+        function fireBullet() {
+            if(upgrades.gunsLevel === 0) return;
+            const count = Math.min(25, upgrades.gunsLevel);
+            const spacing = Math.min(10, 40 / count + 2);
+            for(let i=0; i<count; i++) {
+                const offset = (i - (count - 1) / 2) * spacing * 3;
+                bullets.push({
+                    x: paddle.x + upgrades.paddleWidth/2 + offset,
+                    y: paddle.y,
+                    r: 2.5,
+                    dy: -8, 
+                    color: '#ffff00',
+                    homing: upgrades.homing
+                });
+            }
+        }
+
+        function update(dt) {
+            if(gameState.state !== 'PLAYING') return;
+
+            if(gameState.timeScale < 1.0) {
+                gameState.timeScale += dt; 
+                if(gameState.timeScale > 1.0) gameState.timeScale = 1.0;
+            }
+            const ts = gameState.timeScale;
+
+            updateTimer(dt);
+            gameFrame += ts;
+
+            blocks.forEach(b => {
+                if (b.type === 'horizontal') {
+                    b.x += b.moveParams.speed * ts;
+                    if (b.x <= b.moveParams.minX || b.x >= b.moveParams.maxX) b.moveParams.speed *= -1;
+                } else if (b.type === 'orbit') {
+                    b.moveParams.angle += b.moveParams.speed * ts;
+                    b.x = b.moveParams.cx + Math.cos(b.moveParams.angle) * b.moveParams.radius - (b.w/2);
+                    b.y = b.moveParams.cy + Math.sin(b.moveParams.angle) * b.moveParams.radius - (b.h/2);
+                }
+            });
+
+            paddle.y = canvas.height - 30;
+            const prevPaddleX = paddle.x;
+            if(input.right && paddle.x < canvas.width - upgrades.paddleWidth) paddle.x += paddle.speed * ts;
+            if(input.left && paddle.x > 0) paddle.x -= paddle.speed * ts;
+            const paddleVel = paddle.x - prevPaddleX;
+
+            if(upgrades.gunsLevel > 0 && Math.floor(gameFrame) % upgrades.fireRate === 0) {
+                 fireBullet();
+                 balls.forEach(b => {
+                    if(!b.active) {
+                        b.active = true;
+                        b.dx = 4 * upgrades.ballSpeedMult * (Math.random() < 0.5 ? 1 : -1) + (Math.random() - 0.5);
+                        b.dy = -4 * upgrades.ballSpeedMult;
+                    }
+                 });
+            }
+
+            for(let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i];
+                if(b.homing) {
+                    let target = blocks.find(blk => blk.hp > 0); 
+                    if(target) {
+                        if(b.x < target.x + target.w/2) b.x += 2 * ts;
+                        else b.x -= 2 * ts;
+                    }
+                }
+                b.y += b.dy * ts;
+                let hitIdx = -1;
+                for(let j=0; j<blocks.length; j++) {
+                    let blk = blocks[j];
+                    if(blk.hp > 0 && b.x > blk.x && b.x < blk.x + blk.w && b.y > blk.y && b.y < blk.y + blk.h) {
+                        hitIdx = j; break;
+                    }
+                }
+                if(hitIdx !== -1) {
+                    let blk = blocks[hitIdx];
+                    damageBlock(blk, upgrades.bulletDamage);
+                    bullets.splice(i, 1);
+                } else if(b.y < 0) bullets.splice(i, 1);
+            }
+
+            balls.forEach(ball => {
+                if(!ball.active) {
+                    ball.x = Math.max(10, Math.min(canvas.width-10, paddle.x + upgrades.paddleWidth / 2));
+                    ball.y = paddle.y - ball.radius - 2;
+                    return;
+                }
+                ball.x += ball.dx * ts;
+                ball.y += ball.dy * ts;
+
+                if(ball.x > canvas.width - ball.radius) { ball.x = canvas.width - ball.radius; ball.dx = -Math.abs(ball.dx); } 
+                else if(ball.x < ball.radius) { ball.x = ball.radius; ball.dx = Math.abs(ball.dx); }
+
+                if(ball.y < ball.radius) { ball.y = ball.radius; ball.dy = Math.abs(ball.dy); }
+
+                if (Math.abs(ball.dx) < 1.5) {
+                    let polarity = ball.dx > 0 ? 1 : -1;
+                    if (ball.dx === 0) polarity = Math.random() > 0.5 ? 1 : -1;
+                    ball.dx = polarity * 2.0; 
+                }
+
+                if(ball.y > canvas.height - ball.radius - 5) {
+                    if(shieldActive) {
+                        ball.dy = -Math.abs(ball.dy); 
+                        shieldActive = false; 
+                        createParticles(ball.x, canvas.height, '#00ffff');
+                        updateAiCommentary("쉴드 발동! 위기를 모면했습니다!", true);
+                    } else if (ball.y > canvas.height + 20) {
+                        ball.isDead = true;
+                    }
+                }
+
+                if(ball.dy > 0 &&
+                   ball.y + ball.radius >= paddle.y && 
+                   ball.y - ball.radius <= paddle.y + paddle.height &&
+                   ball.x >= paddle.x && ball.x <= paddle.x + upgrades.paddleWidth) {
+                    
+                    let hitPoint = (ball.x - (paddle.x + upgrades.paddleWidth / 2)) / (upgrades.paddleWidth / 2);
+                    hitPoint += paddleVel * 0.15;
+                    hitPoint = Math.max(-1.3, Math.min(1.3, hitPoint));
+                    let angle = hitPoint * (Math.PI / 3.5); 
+                    let speed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
+                    speed = Math.min(speed * 1.01, 14); 
+
+                    ball.dx = speed * Math.sin(angle);
+                    ball.dy = -speed * Math.cos(angle);
+                    ball.y = paddle.y - ball.radius - 1;
+                }
+
+                blocks.forEach(blk => {
+                    if(blk.hp > 0) {
+                        let testX = Math.max(blk.x, Math.min(ball.x, blk.x + blk.w));
+                        let testY = Math.max(blk.y, Math.min(ball.y, blk.y + blk.h));
+                        let distX = ball.x - testX;
+                        let distY = ball.y - testY;
+                        
+                        if ((distX*distX + distY*distY) <= ball.radius*ball.radius) {
+                            if(Math.abs(distX) > Math.abs(distY)) ball.dx = -ball.dx;
+                            else ball.dy = -ball.dy;
+
+                            damageBlock(blk, upgrades.ballDamage);
+                            if(upgrades.explosiveLevel > 0) {
+                                const radius = 60 * Math.min(10, Math.max(1, upgrades.explosiveLevel));
+                                blocks.forEach(neighbor => {
+                                    if(neighbor !== blk && neighbor.hp > 0) {
+                                        let dx = neighbor.x - blk.x;
+                                        let dy = neighbor.y - blk.y;
+                                        if(Math.sqrt(dx*dx + dy*dy) < radius) damageBlock(neighbor, upgrades.ballDamage * 0.5);
+                                    }
+                                });
+                                createParticles(blk.x+blk.w/2, blk.y+blk.h/2, '#ffaa00', 6);
+                            }
+                        }
+                    }
+                });
+            });
+
+            balls = balls.filter(b => !b.isDead);
+            ballCountEl.innerText = balls.length;
+
+            if(blocks.every(b => b.hp <= 0)) levelCleared();
+            if(balls.length === 0) gameOver(false);
+            scoreEl.innerText = gameState.score;
+        }
+
+        function damageBlock(blk, dmg) {
+            if(blk.hp <= 0) return;
+            blk.hp -= dmg;
+            createParticles(blk.x + blk.w/2, blk.y + blk.h/2, blk.color, 2); 
+            if(blk.hp <= 0) {
+                createParticles(blk.x + blk.w/2, blk.y + blk.h/2, blk.color, 8);
+                gameState.score += (blk.isSpecial ? 50 : 10);
+                if (blk.isSpecial) triggerSpecialItem();
+                const now = Date.now();
+                if(now - gameState.lastComboTime < 1000) gameState.combo++;
+                else gameState.combo = 1;
+                gameState.lastComboTime = now;
+            }
+        }
+
+        function triggerSpecialItem() {
+            gameState.state = 'CARD_SELECT';
+            gameState.itemSelectionType = 'SPECIAL_ITEM';
+            cardTitle.innerText = "SPECIAL ITEM!";
+            cardSubtitle.innerText = "스페셜 블럭 파괴 보상!";
+            showOverlay('CARD_SELECT');
+            renderCards();
+            updateAiCommentary("스페셜 아이템 획득 찬스!", true);
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(26, 28, 44, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if(shieldActive) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height - 5);
+                ctx.lineTo(canvas.width, canvas.height - 5);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+                ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+            }
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = paddle.color;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.roundRect(paddle.x, paddle.y, upgrades.paddleWidth, paddle.height, 6);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            if(upgrades.gunsLevel > 0) {
+                ctx.fillStyle = '#ffaa00';
+                const count = Math.min(25, upgrades.gunsLevel);
+                const spacing = Math.min(10, 40 / count + 2);
+                for(let i=0; i<count; i++) {
+                    const offset = (i - (count - 1) / 2) * spacing * 3;
+                    ctx.fillRect(paddle.x + upgrades.paddleWidth/2 + offset - 1, paddle.y - 6, 2, 6);
+                }
+            }
+
+            blocks.forEach(b => {
+                if(b.hp > 0) {
+                    const hpRatio = b.hp / b.maxHp;
+                    ctx.globalAlpha = 0.3 + (hpRatio * 0.7); 
+                    if (b.isSpecial) {
+                        ctx.shadowBlur = 15; ctx.shadowColor = '#FFD700'; ctx.fillStyle = '#FFD700';
+                    } else {
+                        ctx.shadowBlur = 5; ctx.shadowColor = b.color; ctx.fillStyle = b.color;
+                    }
+                    ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 4); ctx.fill();
+                    ctx.strokeStyle = b.isSpecial ? '#fff' : 'rgba(255,255,255,0.5)';
+                    ctx.lineWidth = b.isSpecial ? 2 : 1; ctx.stroke();
+                    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+                }
+            });
+
+            balls.forEach(b => {
+                ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+                ctx.fillStyle = upgrades.power_ball ? '#ff5555' : b.color;
+                ctx.shadowBlur = 8; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
+            });
+
+            ctx.fillStyle = '#ffff00';
+            bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill(); });
+
+            particles.forEach((p, i) => {
+                if(p.alpha <= 0) particles.splice(i, 1);
+                else {
+                    p.x += p.vx * gameState.timeScale; 
+                    p.y += p.vy * gameState.timeScale; 
+                    p.alpha -= 0.05 * gameState.timeScale;
+                    ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            });
+        }
+
+        function createParticles(x, y, color, count=4) {
+            for(let i=0; i<count; i++) {
+                particles.push({
+                    x, y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, r: Math.random()*2 + 1, color: color, alpha: 1
+                });
+            }
+        }
+
+        function togglePause() {
+            if(gameState.state === 'PLAYING') {
+                gameState.prevState = 'PLAYING';
+                gameState.state = 'PAUSED';
+                showOverlay('PAUSED');
+                pauseBtn.innerText = "▶️";
+            } else if(gameState.state === 'PAUSED') {
+                gameState.state = gameState.prevState;
+                hideOverlay();
+                pauseBtn.innerText = "⏸️";
+            }
+        }
+
+        function showOverlay(mode) {
+            overlay.classList.remove('hidden');
+            titleSection.classList.add('hidden');
+            cardSection.classList.add('hidden');
+            startBtn.classList.add('hidden');
+            resumeBtn.classList.add('hidden');
+            quitBtn.classList.add('hidden');
+
+            if (mode === 'START' || mode === 'GAMEOVER') {
+                titleSection.classList.remove('hidden');
+                startBtn.classList.remove('hidden');
+                startBtn.innerText = mode === 'START' ? "GAME START" : "RETRY";
+                startBtn.classList.remove('btn-secondary'); 
+                
+                if (mode === 'GAMEOVER') {
+                    titleText.innerHTML = gameState.timeLeft <= 0 ? "TIME OVER" : "MISSION<br>FAILED";
+                    subtitleText.innerText = `Score: ${gameState.score}`;
+                } else {
+                    titleText.innerHTML = "NEON BLOCK<br>EVOLUTION";
+                    subtitleText.innerText = "Time Attack Mode";
+                }
+            } 
+            else if (mode === 'CARD_SELECT') {
+                cardSection.classList.remove('hidden');
+            }
+            else if (mode === 'PAUSED') {
+                titleSection.classList.remove('hidden');
+                titleText.innerText = "PAUSED";
+                subtitleText.innerText = "Game Paused";
+                resumeBtn.classList.remove('hidden');
+                quitBtn.classList.remove('hidden'); 
+            }
+        }
+
+        function hideOverlay() {
+            overlay.classList.add('hidden');
+        }
+
+        function quitToMenu() {
+            resetGame();
+            showOverlay('START');
+            pauseBtn.innerText = "⏸️";
+        }
+
+        function resetGame() {
+            gameState.score = 0;
+            gameState.level = 1;
+            gameState.running = false;
+            upgrades = { ...defaultUpgrades }; 
+            shieldActive = false;
+            balls = [];
+            bullets = [];
+            blocks = [];
+            if(paddle) {
+                paddle.y = canvas.height - 30;
+                paddle.x = (canvas.width - upgrades.paddleWidth) / 2;
+            }
+            initLevel();
+            spawnBalls();
+        }
+
+        function generateCards() {
+            let pool = cardsDB.filter(c => {
+                if(c.req === 'gun_active' && upgrades.gunsLevel === 0) return false;
+                return true;
+            });
+            pool.sort(() => Math.random() - 0.5);
+            return pool.slice(0, 3);
+        }
+
+        function renderCards() {
+            const cards = generateCards();
+            cardsContainer.innerHTML = '';
+            cards.forEach(card => {
+                const el = document.createElement('div');
+                el.className = 'card';
+                el.innerHTML = `
+                    <div class="card-icon">${card.icon}</div>
+                    <div class="card-title">${card.title}</div>
+                    <div class="card-desc">${card.desc}</div>
+                `;
+                el.onclick = () => selectCard(card);
+                cardsContainer.appendChild(el);
+            });
+        }
+
+        function selectCard(card) {
+            if(card.id === 'multiball') {
+                upgrades.extraBalls++;
+                // Instant spawn if special item
+                if (gameState.itemSelectionType === 'SPECIAL_ITEM') {
+                    balls.push({
+                        x: paddle.x + upgrades.paddleWidth/2,
+                        y: paddle.y - 20,
+                        radius: 6,
+                        dx: 4 * upgrades.ballSpeedMult * (Math.random() < 0.5 ? 1 : -1) + (Math.random() - 0.5),
+                        dy: -4 * upgrades.ballSpeedMult,
+                        active: true, isDead: false, color: '#fff'
+                    });
+                    ballCountEl.innerText = balls.length;
+                }
+            }
+            if(card.id === 'power_ball') upgrades.ballDamage += 1.0; 
+            if(card.id === 'wide_paddle') upgrades.paddleWidth += 20;
+            if(card.id === 'blaster_count') upgrades.gunsLevel++; 
+            if(card.id === 'blaster_dmg') upgrades.bulletDamage += 0.25;
+            if(card.id === 'blaster_rate') upgrades.fireRate = Math.max(10, upgrades.fireRate - 10);
+            if(card.id === 'homing') upgrades.homing = true;
+            if(card.id === 'explosive') upgrades.explosiveLevel++; 
+            if(card.id === 'shield') {
+                upgrades.shield = true;
+                shieldActive = true; 
+            }
+
+            if(upgrades.gunsLevel > 25) upgrades.gunsLevel = 25;
+            if(upgrades.explosiveLevel > 10) upgrades.explosiveLevel = 10;
+
+            if (gameState.itemSelectionType === 'LEVEL_CLEAR') {
+                updateAiCommentary(`${card.title} 선택 완료!`, true);
+                nextLevel();
+            } else {
+                updateAiCommentary(`${card.title} 획득!`, true);
+                resumeGame();
+            }
+        }
+
+        function resumeGame() {
+            gameState.state = 'PLAYING';
+            gameState.timeScale = 0.05; 
+            hideOverlay();
+        }
+
+        function nextLevel() {
+            gameState.level++;
+            levelEl.innerText = gameState.level;
+            gameState.state = 'PLAYING';
+            gameState.timeScale = 0.05; 
+            hideOverlay();
+            
+            if(upgrades.shield) shieldActive = true;
+            initLevel();
+            spawnBalls();
+            balls.forEach(b => { b.dx = 0; b.dy = 0; b.active = false; });
+        }
+
+        function levelCleared() {
+            gameState.state = 'CARD_SELECT';
+            gameState.itemSelectionType = 'LEVEL_CLEAR';
+            cardTitle.innerText = "STAGE CLEARED!";
+            cardSubtitle.innerText = "전리품을 선택하여 장비를 강화하세요";
+            showOverlay('CARD_SELECT');
+            renderCards();
+            updateAiCommentary(`스테이지 ${gameState.level} 클리어!`, true);
+        }
+
+        function gameOver(isTimeout = false) {
+            gameState.state = 'GAMEOVER';
+            if(isTimeout) gameState.timeLeft = 0; 
+            showOverlay('GAMEOVER');
+            if(gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('evo-high-score', gameState.highScore);
+                highScoreEl.innerText = gameState.highScore;
+            }
+        }
+
+        function startGame() {
+            resetGame();
+            gameState.state = 'PLAYING';
+            gameState.timeScale = 1.0; 
+            hideOverlay();
+            updateAiCommentary("제한시간 내에 블럭을 모두 파괴하세요!", true);
+        }
+
+        let lastTime = 0;
+        let input = { left: false, right: false };
+
+        function loop(timestamp) {
+            if(!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+            animationId = requestAnimationFrame(loop);
+        }
+
+        document.addEventListener('keydown', e => {
+            if(e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
+            if(e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
+            if(e.code === 'Escape') togglePause();
+            if(e.code === 'Space' && gameState.state === 'PLAYING') {
+                balls.forEach(b => {
+                    if(!b.active) {
+                        b.active = true;
+                        b.dx = 4 * upgrades.ballSpeedMult * (Math.random() < 0.5 ? 1 : -1) + (Math.random() - 0.5);
+                        b.dy = -4 * upgrades.ballSpeedMult;
+                    }
+                });
+            }
+        });
+        document.addEventListener('keyup', e => {
+            if(e.code === 'ArrowRight' || e.code === 'KeyD') input.right = false;
+            if(e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = false;
+        });
+        
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const x = e.touches[0].clientX - rect.left;
+            paddle.x = x - upgrades.paddleWidth/2;
+        }, {passive: false});
+
+        canvas.addEventListener('touchstart', () => {
+             if(gameState.state === 'PLAYING') {
+                 balls.forEach(b => {
+                    if(!b.active) {
+                        b.active = true;
+                        b.dx = 4 * upgrades.ballSpeedMult * (Math.random() < 0.5 ? 1 : -1) + (Math.random() - 0.5);
+                        b.dy = -4 * upgrades.ballSpeedMult;
+                    }
+                 });
+             }
+        });
+
+        startBtn.addEventListener('click', startGame);
+        resumeBtn.addEventListener('click', togglePause);
+        quitBtn.addEventListener('click', quitToMenu);
+        pauseBtn.addEventListener('click', togglePause);
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        resetGame();
+        showOverlay('START');
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>

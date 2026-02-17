@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="description" content="MINIGAME FACTORY - 다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    
+    <!-- Open Graph / SNS Share -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="MINIGAME FACTORY">
+    <meta property="og:description" content="다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    <meta property="og:image" content="./public/assets/images/og-image.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="MINIGAME FACTORY">
+    <meta name="twitter:description" content="다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    
+    <title>MINIGAME FACTORY</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="./src/styles/design-system.css">
+    <link rel="stylesheet" href="./src/styles/glassmorphism.css">
+    <link rel="stylesheet" href="./src/styles/neon-effects.css">
+    <link rel="stylesheet" href="./src/styles/animations.css">
+    
+    <style>
+        /* Loading Screen */
+        .loading-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-4);
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-logo {
+            text-align: center;
+        }
+        
+        .loading-logo .top {
+            font-family: var(--font-display);
+            font-size: var(--font-size-2xl);
+            font-weight: 700;
+            color: var(--neon-cyan);
+            text-shadow: 
+                0 0 10px rgba(0, 242, 255, 0.8),
+                0 0 20px rgba(0, 242, 255, 0.5);
+        }
+        
+        .loading-logo .bottom {
+            font-family: var(--font-display);
+            font-size: var(--font-size-2xl);
+            font-weight: 700;
+            color: var(--neon-pink);
+            text-shadow: 
+                0 0 10px rgba(255, 0, 255, 0.8),
+                0 0 20px rgba(255, 0, 255, 0.5);
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 242, 255, 0.2);
+            border-top-color: var(--neon-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .loading-text {
+            font-size: var(--font-size-sm);
+            color: var(--text-muted);
+        }
+        
+        /* App Container */
+        #app {
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        
+        /* Background effects */
+        .bg-effects {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        .bg-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.3;
+            animation: float 20s ease-in-out infinite;
+        }
+        
+        .bg-orb.cyan {
+            width: 300px;
+            height: 300px;
+            background: var(--neon-cyan);
+            top: -100px;
+            right: -100px;
+        }
+        
+        .bg-orb.pink {
+            width: 250px;
+            height: 250px;
+            background: var(--neon-pink);
+            bottom: -50px;
+            left: -50px;
+            animation-delay: -10s;
+        }
+        
+        .bg-orb.yellow {
+            width: 200px;
+            height: 200px;
+            background: var(--neon-yellow);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation-delay: -5s;
+            opacity: 0.15;
+        }
+        
+        /* Grid overlay */
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-logo">
+            <div class="top">MINIGAME</div>
+            <div class="bottom">FACTORY</div>
+        </div>
+        <div class="loading-spinner"></div>
+        <div class="loading-text">로딩 중...</div>
+    </div>
+    
+    <!-- Background Effects -->
+    <div class="bg-effects">
+        <div class="bg-grid"></div>
+        <div class="bg-orb cyan"></div>
+        <div class="bg-orb pink"></div>
+        <div class="bg-orb yellow"></div>
+    </div>
+    
+    <!-- Main App Container -->
+    <div id="app"></div>
+    
+    <!-- Main Script -->
+    <script type="module">
+        import { GameHub } from './src/platform/GameHub.js';
+        
+        // Initialize app when DOM is ready
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Small delay for visual effect
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Initialize GameHub
+            const gameHub = new GameHub('app');
+            
+            // Check for shared game URL
+            const params = new URLSearchParams(window.location.search);
+            const sharedGame = params.get('game');
+            const challengeScore = params.get('challenge');
+            
+            if (sharedGame) {
+                // Show challenge modal if coming from shared link
+                showChallengeModal(sharedGame, challengeScore);
+            }
+            
+            // Hide loading screen
+            const loadingScreen = document.getElementById('loadingScreen');
+            loadingScreen.classList.add('hidden');
+            setTimeout(() => loadingScreen.remove(), 500);
+        });
+        
+        // Challenge modal for shared links
+        function showChallengeModal(gameId, challengeScore) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay glass-overlay animate-fadeIn';
+            modal.innerHTML = `
+                <div class="glass-modal animate-fadeInScale" style="padding: var(--space-6); max-width: 320px; margin: auto; text-align: center;">
+                    <div style="font-size: 3rem; margin-bottom: var(--space-3);">🔥</div>
+                    <h2 class="font-display neon-text-pink" style="margin-bottom: var(--space-2);">도전장이 도착했습니다!</h2>
+                    <p class="text-secondary" style="margin-bottom: var(--space-4);">
+                        누군가 당신에게 도전했습니다!<br>
+                        목표 점수: <span class="neon-text-yellow font-display">${parseInt(challengeScore || 0).toLocaleString()}</span>
+                    </p>
+                    <button class="neon-btn" style="width: 100%;" onclick="this.closest('.modal-overlay').remove()">
+                        도전 수락! 🎮
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.remove();
+            };
+        }
+    </script>
+</body>
+</html>

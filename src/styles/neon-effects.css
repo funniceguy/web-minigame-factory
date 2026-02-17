@@ -1,0 +1,238 @@
+/* ============================================
+   NEON EFFECTS
+   ============================================ */
+
+/* ===== Neon Text Glow ===== */
+.neon-text {
+    text-shadow:
+        0 0 5px currentColor,
+        0 0 10px currentColor,
+        0 0 20px currentColor,
+        0 0 40px currentColor;
+}
+
+.neon-text-cyan {
+    color: var(--neon-cyan);
+    text-shadow:
+        0 0 5px rgba(0, 242, 255, 0.8),
+        0 0 10px rgba(0, 242, 255, 0.6),
+        0 0 20px rgba(0, 242, 255, 0.4),
+        0 0 40px rgba(0, 242, 255, 0.2);
+}
+
+.neon-text-pink {
+    color: var(--neon-pink);
+    text-shadow:
+        0 0 5px rgba(255, 0, 255, 0.8),
+        0 0 10px rgba(255, 0, 255, 0.6),
+        0 0 20px rgba(255, 0, 255, 0.4),
+        0 0 40px rgba(255, 0, 255, 0.2);
+}
+
+.neon-text-yellow {
+    color: var(--neon-yellow);
+    text-shadow:
+        0 0 5px rgba(255, 255, 0, 0.8),
+        0 0 10px rgba(255, 255, 0, 0.6),
+        0 0 20px rgba(255, 255, 0, 0.4),
+        0 0 40px rgba(255, 255, 0, 0.2);
+}
+
+.neon-text-green {
+    color: var(--neon-green);
+    text-shadow:
+        0 0 5px rgba(0, 255, 136, 0.8),
+        0 0 10px rgba(0, 255, 136, 0.6),
+        0 0 20px rgba(0, 255, 136, 0.4),
+        0 0 40px rgba(0, 255, 136, 0.2);
+}
+
+/* ===== Neon Border Glow ===== */
+.neon-border {
+    border: 2px solid var(--neon-cyan);
+    box-shadow:
+        0 0 5px var(--neon-cyan),
+        0 0 10px var(--neon-cyan),
+        inset 0 0 5px rgba(0, 242, 255, 0.1);
+}
+
+.neon-border-pink {
+    border: 2px solid var(--neon-pink);
+    box-shadow:
+        0 0 5px var(--neon-pink),
+        0 0 10px var(--neon-pink),
+        inset 0 0 5px rgba(255, 0, 255, 0.1);
+}
+
+/* ===== Neon Buttons ===== */
+.neon-btn {
+    position: relative;
+    background: transparent;
+    border: 2px solid var(--neon-cyan);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+    color: var(--neon-cyan);
+    font-family: var(--font-display);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all var(--transition-fast);
+    box-shadow:
+        0 0 10px rgba(0, 242, 255, 0.3),
+        inset 0 0 10px rgba(0, 242, 255, 0.1);
+}
+
+.neon-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(0, 242, 255, 0.3),
+            transparent);
+    transition: left var(--transition-slow);
+}
+
+.neon-btn:hover {
+    background: rgba(0, 242, 255, 0.1);
+    box-shadow:
+        0 0 20px rgba(0, 242, 255, 0.5),
+        0 0 40px rgba(0, 242, 255, 0.3),
+        inset 0 0 20px rgba(0, 242, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.neon-btn:hover::before {
+    left: 100%;
+}
+
+.neon-btn:active {
+    transform: translateY(0);
+}
+
+/* Neon Button Variants */
+.neon-btn-pink {
+    border-color: var(--neon-pink);
+    color: var(--neon-pink);
+    box-shadow:
+        0 0 10px rgba(255, 0, 255, 0.3),
+        inset 0 0 10px rgba(255, 0, 255, 0.1);
+}
+
+.neon-btn-pink::before {
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 0, 255, 0.3),
+            transparent);
+}
+
+.neon-btn-pink:hover {
+    background: rgba(255, 0, 255, 0.1);
+    box-shadow:
+        0 0 20px rgba(255, 0, 255, 0.5),
+        0 0 40px rgba(255, 0, 255, 0.3),
+        inset 0 0 20px rgba(255, 0, 255, 0.2);
+}
+
+.neon-btn-filled {
+    background: var(--neon-cyan);
+    color: var(--bg-primary);
+    border-color: var(--neon-cyan);
+}
+
+.neon-btn-filled:hover {
+    background: #33f5ff;
+    box-shadow:
+        0 0 30px rgba(0, 242, 255, 0.6),
+        0 0 60px rgba(0, 242, 255, 0.4);
+}
+
+/* ===== Neon Gradient Background ===== */
+.neon-gradient-bg {
+    position: relative;
+    overflow: hidden;
+}
+
+.neon-gradient-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(from 0deg,
+            var(--neon-cyan),
+            var(--neon-pink),
+            var(--neon-yellow),
+            var(--neon-green),
+            var(--neon-cyan));
+    animation: neon-rotate 10s linear infinite;
+    opacity: 0.3;
+}
+
+@keyframes neon-rotate {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* ===== Neon Pulse Effect ===== */
+.neon-pulse {
+    animation: neon-pulse-anim 2s ease-in-out infinite;
+}
+
+@keyframes neon-pulse-anim {
+
+    0%,
+    100% {
+        box-shadow:
+            0 0 5px var(--neon-cyan),
+            0 0 10px var(--neon-cyan);
+    }
+
+    50% {
+        box-shadow:
+            0 0 15px var(--neon-cyan),
+            0 0 30px var(--neon-cyan),
+            0 0 45px var(--neon-cyan);
+    }
+}
+
+/* ===== Neon Line ===== */
+.neon-line {
+    height: 2px;
+    background: linear-gradient(90deg,
+            transparent,
+            var(--neon-cyan),
+            transparent);
+    box-shadow: 0 0 10px var(--neon-cyan);
+}
+
+/* ===== Neon Icon ===== */
+.neon-icon {
+    filter: drop-shadow(0 0 5px currentColor);
+    transition: filter var(--transition-fast);
+}
+
+.neon-icon:hover {
+    filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 20px currentColor);
+}
+
+/* ===== Neon Score Display ===== */
+.neon-score {
+    font-family: var(--font-display);
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--neon-yellow);
+    text-shadow:
+        0 0 10px rgba(255, 255, 0, 0.8),
+        0 0 20px rgba(255, 255, 0, 0.5),
+        0 0 30px rgba(255, 255, 0, 0.3);
+    letter-spacing: 0.05em;
+}

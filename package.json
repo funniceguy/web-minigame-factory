@@ -1,0 +1,13 @@
+{
+  "name": "web-minigame-factory",
+  "version": "1.0.0",
+  "description": "High-performance web minigame platform with SNS sharing",
+  "type": "module",
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve ."
+  },
+  "keywords": ["minigame", "canvas", "html5", "mobile"],
+  "author": "",
+  "license": "MIT"
+}

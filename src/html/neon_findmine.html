@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horror Minesweeper: Bloody Field</title>
+    <!-- 고딕 호러 폰트 로드 -->
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --blood-red: #8b0000;
+            --neon-red: #ff3131;
+            --metal-grey: #2a2a2a;
+            --text-grey: #a0a0a0;
+            --panel-bg: rgba(15, 15, 15, 0.95);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-dark);
+            /* 배경 노이즈 및 그라데이션 효과 */
+            background-image: 
+                radial-gradient(circle at center, transparent, rgba(0,0,0,0.9)),
+                repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(255,0,0,0.015) 1px, rgba(255,0,0,0.015) 2px);
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--text-grey);
+            overflow: hidden;
+        }
+
+        .game-wrapper {
+            background: var(--panel-bg);
+            padding: 30px;
+            border: 2px solid var(--blood-red);
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(139, 0, 0, 0.4), inset 0 0 15px rgba(0,0,0,1);
+            position: relative;
+            max-width: 95vw;
+        }
+
+        /* 피가 흐르는 타이틀 */
+        .title {
+            font-family: 'Nosifer', cursive;
+            font-size: 2rem;
+            color: var(--blood-red);
+            text-shadow: 0 0 12px rgba(255, 0, 0, 0.6);
+            margin-bottom: 25px;
+            text-align: center;
+            animation: pulse 4s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.03); filter: brightness(1.4); }
+        }
+
+        /* 난이도 선택 */
+        .difficulty-nav {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 25px;
+        }
+
+        .diff-btn {
+            background: #111;
+            border: 1px solid var(--metal-grey);
+            color: #666;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .diff-btn:hover {
+            border-color: var(--blood-red);
+            color: var(--text-grey);
+        }
+
+        .diff-btn.active {
+            background: var(--blood-red);
+            border-color: var(--neon-red);
+            color: white;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+        }
+
+        /* 상태바 */
+        .status-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #000;
+            padding: 15px 25px;
+            border: 1px solid #333;
+            border-bottom: 2px solid var(--blood-red);
+            margin-bottom: 25px;
+        }
+
+        .status-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80px;
+        }
+
+        .status-label {
+            font-size: 0.6rem;
+            color: #555;
+            margin-bottom: 3px;
+            letter-spacing: 1px;
+        }
+
+        .status-value {
+            font-size: 1.6rem;
+            color: var(--neon-red);
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255, 0, 0, 0.8);
+        }
+
+        #face-btn {
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));
+            transition: transform 0.1s;
+        }
+
+        #face-btn:active { transform: scale(0.9); }
+
+        /* 그리드 */
+        .grid-container {
+            max-height: 60vh;
+            overflow: auto;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #222;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        #grid {
+            display: grid;
+            gap: 4px;
+            margin: 0 auto;
+        }
+
+        .cell {
+            width: 34px;
+            height: 34px;
+            background: #1a1a1a;
+            border: 1px solid #252525;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 900;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .cell:hover:not(.revealed) {
+            background: #251010;
+            border-color: #501010;
+        }
+
+        .cell.revealed {
+            background: #080808;
+            border-color: #151515;
+            cursor: default;
+        }
+
+        /* 숫자별 색상 (고딕 톤) */
+        .c1 { color: #4a5d7e; }
+        .c2 { color: #4a7e5d; }
+        .c3 { color: #8b2a2a; }
+        .c4 { color: #5a2a8b; }
+        .c5 { color: #8b5a2a; }
+        .c6 { color: #2a8b8b; }
+        .c7 { color: #ffffff; }
+        .c8 { color: #ff0000; text-shadow: 0 0 5px red; }
+
+        .cell.mine {
+            background: var(--blood-red) !important;
+            animation: jitter 0.15s infinite;
+        }
+
+        @keyframes jitter {
+            0% { transform: translate(1px, 1px); }
+            50% { transform: translate(-1px, -1px); }
+            100% { transform: translate(1px, -1px); }
+        }
+
+        .cell.flagged {
+            color: var(--neon-red) !important;
+            font-size: 1.2rem;
+        }
+
+        /* 전체 화면 점멸 효과 */
+        @keyframes flash-red {
+            0% { background-color: var(--bg-dark); }
+            50% { background-color: #400; }
+            100% { background-color: var(--bg-dark); }
+        }
+
+        .flash { animation: flash-red 0.3s 2; }
+
+        /* 스크롤바 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: var(--blood-red); border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="game-wrapper">
+    <div class="title">BLOODY FIELD</div>
+
+    <div class="difficulty-nav">
+        <button class="diff-btn active" onclick="setDiff('easy')">EASY</button>
+        <button class="diff-btn" onclick="setDiff('medium')">MEDIUM</button>
+        <button class="diff-btn" onclick="setDiff('hard')">HARD</button>
+    </div>
+
+    <div class="status-panel">
+        <div class="status-box">
+            <span class="status-label">SPIRITS</span>
+            <span class="status-value" id="mine-count">010</span>
+        </div>
+        <button id="face-btn" onclick="initGame()">💀</button>
+        <div class="status-box">
+            <span class="status-label">TIME</span>
+            <span class="status-value" id="timer">000</span>
+        </div>
+    </div>
+
+    <div class="grid-container">
+        <div id="grid"></div>
+    </div>
+</div>
+
+<script>
+    const levels = {
+        easy: { r: 10, c: 10, m: 10 },
+        medium: { r: 15, c: 15, m: 40 },
+        hard: { r: 16, c: 30, m: 99 }
+    };
+
+    let curMode = 'easy';
+    let board = [];
+    let revealed = 0;
+    let flags = 0;
+    let isOver = false;
+    let timerId = null;
+    let time = 0;
+    let isFirst = true;
+
+    const gridEl = document.getElementById('grid');
+    const mineEl = document.getElementById('mine-count');
+    const timerEl = document.getElementById('timer');
+    const faceBtn = document.getElementById('face-btn');
+
+    function setDiff(mode) {
+        curMode = mode;
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.innerText.toLowerCase() === mode);
+        });
+        initGame();
+    }
+
+    function initGame() {
+        const { r, c, m } = levels[curMode];
+        board = [];
+        revealed = 0;
+        flags = 0;
+        isOver = false;
+        isFirst = true;
+        
+        stopTimer();
+        time = 0;
+        timerEl.innerText = '000';
+        mineEl.innerText = String(m).padStart(3, '0');
+        faceBtn.innerText = '💀';
+
+        gridEl.innerHTML = '';
+        gridEl.style.gridTemplateColumns = `repeat(${c}, 34px)`;
+
+        for (let i = 0; i < r; i++) {
+            board[i] = [];
+            for (let j = 0; j < c; j++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.onmousedown = (e) => handleInput(e, i, j);
+                cell.oncontextmenu = (e) => e.preventDefault();
+                gridEl.appendChild(cell);
+                board[i][j] = { mine: false, open: false, flag: false, el: cell };
+            }
+        }
+    }
+
+    function handleInput(e, r, c) {
+        if (isOver) return;
+        
+        // 왼쪽 클릭 (0) 또는 오른쪽 클릭 (2)
+        if (e.button === 0) {
+            onLeftClick(r, c);
+        } else if (e.button === 2) {
+            onRightClick(r, c);
+        }
+    }
+
+    function onLeftClick(r, c) {
+        const cell = board[r][c];
+        if (cell.open || cell.flag) return;
+
+        if (isFirst) {
+            setupMines(r, c);
+            startTimer();
+            isFirst = false;
+        }
+
+        if (cell.mine) {
+            endGame(false);
+            return;
+        }
+
+        reveal(r, c);
+        checkWin();
+    }
+
+    function onRightClick(r, c) {
+        if (isFirst) return; // 첫 클릭 전에는 깃발 금지
+        const cell = board[r][c];
+        if (cell.open) return;
+
+        cell.flag = !cell.flag;
+        cell.el.innerText = cell.flag ? '✝' : '';
+        cell.el.classList.toggle('flagged', cell.flag);
+        
+        flags += cell.flag ? 1 : -1;
+        const remaining = levels[curMode].m - flags;
+        mineEl.innerText = String(Math.max(0, remaining)).padStart(3, '0');
+    }
+
+    function setupMines(exR, exC) {
+        const { r, c, m } = levels[curMode];
+        let placed = 0;
+        while (placed < m) {
+            let rr = Math.floor(Math.random() * r);
+            let cc = Math.floor(Math.random() * c);
+            
+            // 첫 클릭 지점 및 주변 8칸 제외 (보고서 규칙 준수)
+            if (!board[rr][cc].mine && (Math.abs(rr - exR) > 1 || Math.abs(cc - exC) > 1)) {
+                board[rr][cc].mine = true;
+                placed++;
+            }
+        }
+    }
+
+    function reveal(r, c) {
+        const { r: maxR, c: maxC } = levels[curMode];
+        if (r < 0 || r >= maxR || c < 0 || c >= maxC || board[r][c].open || board[r][c].flag) return;
+
+        const cell = board[r][c];
+        cell.open = true;
+        cell.el.classList.add('revealed');
+        revealed++;
+
+        const count = getNeighborMines(r, c);
+        if (count > 0) {
+            cell.el.innerText = count;
+            cell.el.classList.add('c' + count);
+        } else {
+            // 빈 칸 확장
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    reveal(r + dr, c + dc);
+                }
+            }
+        }
+    }
+
+    function getNeighborMines(r, c) {
+        const { r: maxR, c: maxC } = levels[curMode];
+        let n = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                let nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < maxR && nc >= 0 && nc < maxC && board[nr][nc].mine) n++;
+            }
+        }
+        return n;
+    }
+
+    function checkWin() {
+        const { r, c, m } = levels[curMode];
+        if (revealed === (r * c) - m) endGame(true);
+    }
+
+    function startTimer() {
+        if (timerId) return;
+        timerId = setInterval(() => {
+            time++;
+            timerEl.innerText = String(Math.min(time, 999)).padStart(3, '0');
+        }, 1000);
+    }
+
+    function stopTimer() {
+        clearInterval(timerId);
+        timerId = null;
+    }
+
+    function endGame(win) {
+        isOver = true;
+        stopTimer();
+        faceBtn.innerText = win ? '🧛' : '🩸';
+        
+        if (!win) {
+            document.body.classList.add('flash');
+            setTimeout(() => document.body.classList.remove('flash'), 600);
+        }
+
+        // 지뢰 전체 공개
+        board.forEach(row => row.forEach(cell => {
+            if (cell.mine) {
+                cell.el.innerText = '💥';
+                cell.el.classList.add('mine');
+            } else if (cell.flag) {
+                cell.el.innerText = '❌'; // 잘못된 깃발
+            }
+        }));
+    }
+
+    // 초기 실행
+    initGame();
+</script>
+
+</body>
+</html>
