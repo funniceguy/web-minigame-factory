@@ -1269,5 +1269,122 @@ function updateUI() {
     document.getElementById('wave-txt').innerText = `${wave} / ${MAX_WAVE}`;
 }
 </script>
+<script>
+(() => {
+    if (window.__mgpBridgeInstalled) return;
+    window.__mgpBridgeInstalled = true;
+
+    const metrics = {
+        startedAt: Date.now(),
+        stageClears: 0,
+        maxCombo: 0,
+        comboCount: 0,
+        itemsCollected: 0,
+        itemCounts: {},
+        sent: false
+    };
+
+    const addItem = (itemId, count = 1) => {
+        if (!itemId) return;
+        const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+        metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
+        metrics.itemsCollected += safeCount;
+    };
+
+    const updateLive = () => {
+        metrics.maxCombo = Math.max(metrics.maxCombo, Number(combo || 0));
+    };
+
+    const snapshot = () => {
+        updateLive();
+        return {
+            score: Math.floor(Number(score || 0)),
+            level: Math.floor(Number(wave || 1)),
+            maxCombo: Math.floor(metrics.maxCombo),
+            comboCount: Math.floor(metrics.comboCount),
+            stageClears: Math.floor(metrics.stageClears),
+            itemsCollected: Math.floor(metrics.itemsCollected),
+            itemCounts: { ...metrics.itemCounts },
+            duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
+        };
+    };
+
+    const postResult = (force = false) => {
+        if (metrics.sent && !force) return;
+        parent.postMessage({
+            source: 'mgp-game',
+            type: 'result',
+            payload: snapshot()
+        }, '*');
+        metrics.sent = true;
+    };
+
+    if (typeof applyUpgrade === 'function') {
+        const originalApplyUpgrade = applyUpgrade;
+        applyUpgrade = function (id, m) {
+            addItem(id, Math.max(1, Math.floor(Number(m) || 1)));
+            return originalApplyUpgrade.apply(this, arguments);
+        };
+    }
+
+    if (typeof completeWave === 'function') {
+        const originalCompleteWave = completeWave;
+        completeWave = function () {
+            metrics.stageClears += 1;
+            return originalCompleteWave.apply(this, arguments);
+        };
+    }
+
+    if (typeof damageEnemy === 'function') {
+        const originalDamageEnemy = damageEnemy;
+        damageEnemy = function (enemy) {
+            const wasAlive = enemy && enemy.hp > 0;
+            const result = originalDamageEnemy.apply(this, arguments);
+            if (wasAlive && enemy && enemy.hp <= 0) {
+                metrics.comboCount += 1;
+                updateLive();
+            }
+            return result;
+        };
+    }
+
+    if (typeof showVictory === 'function') {
+        const originalShowVictory = showVictory;
+        showVictory = function () {
+            const result = originalShowVictory.apply(this, arguments);
+            postResult();
+            return result;
+        };
+    }
+
+    if (typeof damagePlayer === 'function') {
+        const originalDamagePlayer = damagePlayer;
+        damagePlayer = function () {
+            const result = originalDamagePlayer.apply(this, arguments);
+            if (gameState === 'OVER') {
+                postResult();
+            }
+            return result;
+        };
+    }
+
+    if (typeof resetState === 'function') {
+        const originalResetState = resetState;
+        resetState = function () {
+            metrics.startedAt = Date.now();
+            metrics.stageClears = 0;
+            metrics.maxCombo = 0;
+            metrics.comboCount = 0;
+            metrics.itemsCollected = 0;
+            metrics.itemCounts = {};
+            metrics.sent = false;
+            return originalResetState.apply(this, arguments);
+        };
+    }
+
+    window.__mgpSnapshot = snapshot;
+    window.addEventListener('beforeunload', () => postResult(true));
+})();
+</script>
 </body>
 </html>

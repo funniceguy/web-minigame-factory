@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=landscape">
+    <title>BizTycoon: Neon Roguelike</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@0.263.1"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;700&display=swap');
+        
+        body { 
+            font-family: 'Noto Sans KR', 'Exo 2', sans-serif; 
+            background-color: #050505; 
+            color: white; 
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            background-image: radial-gradient(circle at 50% 50%, #111827 0%, #000000 100%);
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .font-exo { font-family: 'Exo 2', sans-serif; }
+        
+        /* 커스텀 슬라이더 */
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #22d3ee; margin-top: -5px; cursor: pointer; box-shadow: 0 0 10px #22d3ee; border: 2px solid #fff; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #334155; border-radius: 2px; }
+        
+        /* 네온 글래스 패널 */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        .info-box {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .glass-button {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.1s;
+        }
+        .glass-button:active { transform: scale(0.96); }
+        
+        .text-shadow-neon { text-shadow: 0 0 8px rgba(34, 211, 238, 0.6); }
+        .text-shadow-red { text-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+        /* 애니메이션 */
+        @keyframes pulse-red-border { 0%, 100% { border-color: rgba(239, 68, 68, 0.2); } 50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } }
+        .danger-pulse { animation: pulse-red-border 2s infinite; }
+
+        @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .toast-enter { animation: slideInLeft 0.3s ease-out forwards; }
+    </style>
+</head>
+<body>
+    <div id="root" class="w-full h-full flex items-center justify-center p-2 md:p-4"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        const LucideIcon = ({ name, size = 20, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide && window.lucide.icons && iconRef.current) {
+                    const { icons } = window.lucide;
+                    if (icons[name]) {
+                        const svg = icons[name].toSvg({ class: className, width: size, height: size, "stroke-width": 2 });
+                        iconRef.current.innerHTML = svg;
+                    }
+                }
+            }, [name, size, className]);
+            return <span ref={iconRef} className="flex items-center justify-center"></span>;
+        };
+        const Icon = (props) => <LucideIcon {...props} />;
+
+        const STAGES = [
+            { level: 1, name: "동네 까페", target: 100000, input: "원두", iconName: "Coffee", rival: "별다방", difficulty: 1.0, roles: ["알바", "매니저", "점장"] },
+            { level: 2, name: "정밀 제조", target: 300000, input: "강철", iconName: "Hammer", rival: "삼성공업", difficulty: 1.3, roles: ["기능공", "엔지니어", "공장장"] },
+            { level: 3, name: "웹툰 스튜디오", target: 700000, input: "콘티", iconName: "PenTool", rival: "N웹툰", difficulty: 1.6, roles: ["어시", "작가", "PD"] },
+            { level: 4, name: "영화 제작사", target: 1500000, input: "시나리오", iconName: "Film", rival: "CGV", difficulty: 2.0, roles: ["배우", "감독", "제작자"] },
+            { level: 5, name: "게임 개발사", target: 3000000, input: "코드", iconName: "Gamepad2", rival: "Nexon", difficulty: 2.5, roles: ["개발자", "기획자", "디렉터"] },
+            { level: 6, name: "엔터테인먼트", target: 6000000, input: "연습생", iconName: "Mic2", rival: "HYPE", difficulty: 3.0, roles: ["매니저", "프로듀서", "대표"] },
+            { level: 7, name: "언론사", target: 12000000, input: "제보", iconName: "Newspaper", rival: "조선일보", difficulty: 3.6, roles: ["기자", "편집장", "국장"] },
+            { level: 8, name: "투자 자문", target: 25000000, input: "데이터", iconName: "TrendingUp", rival: "모건스탠리", difficulty: 4.3, roles: ["분석가", "매니저", "파트너"] },
+            { level: 9, name: "M&A 부띠끄", target: 50000000, input: "부실기업", iconName: "Briefcase", rival: "KKR", difficulty: 5.1, roles: ["회계사", "변호사", "MD"] },
+            { level: 10, name: "우주 산업", target: 100000000, input: "로켓부품", iconName: "Rocket", rival: "SpaceX", difficulty: 6.0, roles: ["연구원", "센터장", "비행사"] },
+        ];
+
+        const EMPLOYEE_TIERS = {
+            C: { name: "C급", color: "text-gray-400", bg: "bg-gray-800/80", skillMult: 1, wageMult: 1, baseLoyalty: 50 },
+            B: { name: "B급", color: "text-emerald-400", bg: "bg-emerald-900/80", skillMult: 2.5, wageMult: 1.8, baseLoyalty: 60 },
+            A: { name: "A급", color: "text-cyan-400", bg: "bg-cyan-900/80", skillMult: 6, wageMult: 3.5, baseLoyalty: 75 },
+            S: { name: "S급", color: "text-purple-400", bg: "bg-purple-900/80", skillMult: 15, wageMult: 6, baseLoyalty: 90 },
+            SS: { name: "Legend", color: "text-yellow-400", bg: "bg-yellow-900/80", skillMult: 40, wageMult: 12, baseLoyalty: 100 },
+        };
+
+        const generateEmployee = (roleList, difficulty, guaranteedTier = null) => {
+            const rand = Math.random();
+            let tier = 'C';
+            if (guaranteedTier) tier = guaranteedTier;
+            else if (rand < 0.005) tier = 'SS';
+            else if (rand < 0.02) tier = 'S';
+            else if (rand < 0.12) tier = 'A';
+            else if (rand < 0.40) tier = 'B';
+            
+            const tierData = EMPLOYEE_TIERS[tier];
+            const role = roleList[Math.floor(Math.random() * roleList.length)];
+            const baseSkill = 10 * difficulty;
+            const skill = Math.floor(baseSkill * tierData.skillMult * (0.9 + Math.random() * 0.2));
+            const wage = Math.floor(30 * difficulty * tierData.wageMult);
+            const baseLoyalty = Math.floor(Math.random() * 100) + 1;
+
+            return { id: Date.now() + Math.random(), name: `${role} ${Math.floor(Math.random()*100)}호`, role, tier, skill, wage, loyalty: 100, baseLoyalty };
+        };
+
+        // 달러($) 포맷터
+        const fmtMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+        
+        const getLoyaltyTrait = (loyalty) => loyalty >= 90 ? "충신" : loyalty >= 70 ? "애사심" : loyalty >= 40 ? "일반인" : loyalty >= 20 ? "기회주의" : "배신자";
+        const calculateScoutCost = (emp, diff) => Math.floor(3000 * diff * (emp.skill / (10 * diff)) * 1.5 * (0.2 + (0.8 * (emp.loyalty / 100))));
+        const calculateSabotageCost = (emp, diff) => Math.floor(calculateScoutCost(emp, diff) * 0.1);
+        const calculateScoutChance = (emp) => Math.max(0, 0.5 * (1 - (emp.loyalty * emp.baseLoyalty) / 10000));
+
+        // --- Toasts (Left Top, above Stage Info) ---
+        const Toast = ({ msgs }) => (
+            <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 pointer-events-none items-start">
+                {msgs.map(m => (
+                    <div key={m.id} className="toast-enter glass-panel px-4 py-3 rounded-xl border-l-4 border-cyan-400 flex items-center gap-3 shadow-2xl backdrop-blur-md bg-slate-900/90 min-w-[200px]">
+                        <Icon name={m.icon || "Info"} size={20} className="text-cyan-400 shrink-0"/>
+                        <span className="text-sm text-slate-100 font-bold">{m.text}</span>
+                    </div>
+                ))}
+            </div>
+        );
+
+        // --- Main Component ---
+        function App() {
+            const [stageIdx, setStageIdx] = useState(0);
+            const [gameState, setGameState] = useState("playing");
+            const [speed, setSpeed] = useState(1);
+            const [toasts, setToasts] = useState([]);
+            const [modal, setModal] = useState(null);
+
+            const [res, setRes] = useState({ cash: 30000, input: 0, output: 0 });
+            const [market, setMarket] = useState({ price: 10, basePrice: 10, trend: 1.0 });
+            const [strat, setStrat] = useState({ price: 40, prodRate: 0 });
+            const [emps, setEmps] = useState([]);
+            const [rival, setRival] = useState({ price: 45, share: 60, cash: 200000, maxCash: 200000, emps: [] });
+            
+            const [day, setDay] = useState(1);
+            const stage = STAGES[stageIdx];
+            
+            const myQual = 20 * stage.difficulty + (emps.reduce((acc, e) => acc + (e.skill * (e.loyalty >= 50 ? 1 : e.loyalty/100)), 0) * 0.5);
+            const rivalQual = 20 * stage.difficulty + (rival.emps.reduce((acc, e) => acc + (e.skill * (e.loyalty >= 50 ? 1 : e.loyalty/100)), 0) * 0.5);
+            const myValue = (myQual / strat.price) * 100;
+            const rivalValue = (rivalQual / rival.price) * 100;
+
+            const notify = (text, icon="Info") => {
+                const id = Date.now();
+                setToasts(prev => [{id, text, icon}, ...prev].slice(0, 3));
+                setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+            };
+
+            // Game Loop
+            useEffect(() => {
+                if (gameState !== "playing") return;
+                const timer = setInterval(() => tick(), 1000 / speed);
+                return () => clearInterval(timer);
+            }, [gameState, speed, res, market, strat, rival, emps]);
+
+            useEffect(() => { if(day===1 && gameState==="playing") notify(`Stage ${stageIdx+1}: ${stage.name} 시작!`, "Rocket"); }, [stageIdx]);
+
+            const tick = () => {
+                const diff = stage.difficulty;
+                let { cash, input, output } = res;
+                let inputPrice = market.price;
+                let { cash: rCash, price: rPrice, share: rShare, emps: rEmps } = rival;
+
+                if (inputPrice > market.basePrice) inputPrice = Math.max(market.basePrice, inputPrice - 0.05);
+                
+                if (Math.random() < 0.1) {
+                    if (rShare < 50) rPrice = Math.max(10*diff, rPrice - 1);
+                    else if (rShare > 70) rPrice += 0.5;
+                }
+                const rRecruitCost = 3000 * diff;
+                const rEmpCap = Math.max(2, emps.length + Math.floor(diff) + 1);
+                if (rEmps.length < rEmpCap && rCash > rRecruitCost*2 && Math.random() < 0.05) {
+                    rCash -= rRecruitCost;
+                    rEmps.push(generateEmployee(stage.roles, diff));
+                    notify(`${stage.rival}, 인재 영입!`, "Users");
+                }
+
+                let shareChange = (myValue - rivalValue) * 0.1 - (diff * 0.05);
+                let newRShare = Math.min(100, Math.max(0, rShare - shareChange));
+
+                if (newRShare <= 10) {
+                    const dmg = 2000 * diff * speed;
+                    rCash -= dmg;
+                    if (day % 10 === 0) notify(`시장 독점! ${stage.rival} 자금 급감`, "Flame");
+                } else {
+                    const rSales = Math.floor((newRShare / 100 * 200) * market.trend);
+                    rCash = Math.min(rival.maxCash, rCash + (rSales * rPrice) - (rSales * inputPrice));
+                    rCash -= rEmps.reduce((acc,e)=>acc+e.wage,0);
+                }
+
+                const maxProd = Math.max(1, emps.length * 5);
+                const actualProd = Math.min(strat.prodRate, maxProd);
+                const prodCost = actualProd * 5 * diff;
+                
+                if (actualProd > 0 && input >= actualProd && cash >= prodCost) {
+                    input -= actualProd;
+                    output += actualProd;
+                    cash -= prodCost;
+                }
+
+                cash -= emps.reduce((acc,e)=>acc+e.wage,0);
+                const mShare = 100 - newRShare;
+                const demand = Math.floor((200 * market.trend) * (mShare / 100));
+                const sold = Math.min(output, demand);
+                cash += sold * strat.price;
+                output -= sold;
+
+                setRes({ cash, input, output });
+                setMarket(p => ({ ...p, price: inputPrice }));
+                setRival({ price: rPrice, share: newRShare, cash: rCash, maxCash: rival.maxCash, emps: rEmps });
+                setDay(d => d + 1);
+
+                if (cash < 0) setGameState("bankrupt");
+                else if (cash >= stage.target) setGameState("stageClear");
+                else if (rCash <= 0) setGameState("stageClear");
+            };
+
+            // Actions
+            const buyInput = (amt) => {
+                const cost = amt * market.price;
+                if (res.cash >= cost) {
+                    setRes(p => ({ ...p, cash: p.cash - cost, input: p.input + amt }));
+                    setMarket(p => ({ ...p, price: p.price * (1 + (amt <= 10 ? 0.01 : 0.05)) }));
+                } else notify("자금 부족!", "AlertTriangle");
+            };
+            const recruit = (type) => {
+                const cost = (type === 'normal' ? 2000 : 15000) * stage.difficulty;
+                if (res.cash < cost) { notify("자금 부족!", "AlertTriangle"); return; }
+                setRes(p => ({ ...p, cash: p.cash - cost }));
+                const tier = type === 'headhunter' && Math.random() < 0.2 ? 'S' : null;
+                const newEmp = generateEmployee(stage.roles, stage.difficulty, tier);
+                setEmps(p => [...p, newEmp]);
+                notify(`${newEmp.name} 영입 성공!`, "UserPlus");
+            };
+            const fireEmployee = (id) => {
+                const emp = emps.find(e => e.id === id);
+                if (res.cash >= emp.wage*3) {
+                    setRes(p => ({ ...p, cash: p.cash - (emp.wage*3) }));
+                    setEmps(p => p.filter(e => e.id !== id));
+                    notify("직원 해고 완료", "UserMinus");
+                } else notify("퇴직금 부족", "AlertTriangle");
+            };
+            const giveBonus = (id) => {
+                const emp = emps.find(e => e.id === id);
+                const cost = calculateSabotageCost(emp, stage.difficulty);
+                if (res.cash >= cost) {
+                    setRes(p => ({ ...p, cash: p.cash - cost }));
+                    setEmps(p => p.map(e => e.id === id ? { ...e, loyalty: Math.min(100, e.loyalty + 20) } : e));
+                    notify(`보너스 지급 완료`, "Gift");
+                } else notify("자금 부족", "AlertTriangle");
+            };
+            const sabotage = (id) => {
+                const target = rival.emps.find(e => e.id === id);
+                const cost = calculateSabotageCost(target, stage.difficulty);
+                if (res.cash < cost) { notify("자금 부족!", "AlertTriangle"); return; }
+                setRes(p => ({ ...p, cash: p.cash - cost }));
+                if (Math.random() > 0.5) {
+                    setRival(p => ({ ...p, emps: p.emps.map(e => e.id === id ? { ...e, loyalty: Math.max(0, e.loyalty - 20) } : e) }));
+                    notify("이간질 성공!", "Skull");
+                } else notify("이간질 실패...", "ShieldAlert");
+            };
+            const scout = (id) => {
+                const target = rival.emps.find(e => e.id === id);
+                const cost = calculateScoutCost(target, stage.difficulty);
+                if (res.cash < cost) { notify("자금 부족!", "AlertTriangle"); return; }
+                setRes(p => ({ ...p, cash: p.cash - cost }));
+                if (Math.random() < calculateScoutChance(target)) {
+                    setRival(p => ({ ...p, emps: p.emps.filter(e => e.id !== id) }));
+                    setEmps(p => [...p, { ...target, id: Date.now(), loyalty: 80 }]);
+                    notify("스카웃 성공!", "UserCheck");
+                } else notify("스카웃 거절됨", "XCircle");
+            };
+            const nextLevel = () => {
+                const nIdx = stageIdx + 1;
+                if (nIdx >= STAGES.length) { setGameState("gameClear"); return; }
+                setStageIdx(nIdx);
+                const nStage = STAGES[nIdx];
+                const initCash = 30000 * nStage.difficulty;
+                setRes({ cash: initCash, input: 0, output: 0 });
+                setRival({ price: 50 * nStage.difficulty, share: 60, cash: initCash * 5, maxCash: initCash * 5, emps: [] });
+                setEmps([]); setStrat({ price: 45 * nStage.difficulty, prodRate: 0 });
+                setMarket({ price: 10 * nStage.difficulty, basePrice: 10 * nStage.difficulty, trend: 1.0 });
+                setGameState("playing"); setDay(1);
+            };
+            const restartGame = () => {
+                setStageIdx(0); setGameState("playing"); setSpeed(1);
+                setRes({ cash: 30000, input: 0, output: 0 });
+                setMarket({ price: 10, basePrice: 10, trend: 1.0 });
+                setStrat({ price: 40, prodRate: 0 });
+                setEmps([]);
+                setRival({ price: 45, share: 60, cash: 200000, maxCash: 200000, emps: [] });
+                setDay(1);
+            };
+
+            const flashClass = res.cash < 5000 ? 'danger-pulse' : '';
+
+            // --- Simplified Modals for compact code ---
+            const renderHRModal = () => (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
+                    <div className="glass-panel w-full max-w-lg rounded-2xl p-4 max-h-[80vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-white flex gap-2"><Icon name="Users"/> 인사 관리</h2><button onClick={()=>setModal(null)}><Icon name="XCircle" className="text-slate-400"/></button></div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                             <div className="grid grid-cols-2 gap-2 mb-4">
+                                <button onClick={()=>recruit('normal')} className="glass-button p-2 rounded text-xs text-white">일반 채용<br/>{fmtMoney(2000*stage.difficulty)}</button>
+                                <button onClick={()=>recruit('headhunter')} className="glass-button p-2 rounded text-xs text-yellow-300 border-yellow-500/30">헤드헌팅<br/>{fmtMoney(15000*stage.difficulty)}</button>
+                            </div>
+                            {emps.length===0 && <p className="text-center text-slate-500 text-xs">직원 없음</p>}
+                            {emps.map(e => <div key={e.id} className="bg-slate-800/50 p-2 rounded flex justify-between items-center text-xs">
+                                <div><span className={`px-1 rounded border mr-1 ${EMPLOYEE_TIERS[e.tier].color}`}>{EMPLOYEE_TIERS[e.tier].name}</span>{e.name} <span className="text-pink-400 ml-1">♥{e.loyalty}</span></div>
+                                <div className="flex gap-1"><button onClick={()=>giveBonus(e.id)} className="bg-pink-900/30 text-pink-200 px-1 rounded">보너스</button><button onClick={()=>fireEmployee(e.id)} className="border border-slate-600 px-1 rounded">해고</button></div>
+                            </div>)}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderSpyModal = () => (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
+                    <div className="glass-panel w-full max-w-lg rounded-2xl p-4 max-h-[80vh] flex flex-col border-red-500/30" onClick={e=>e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-red-100 flex gap-2"><Icon name="Eye"/> 경쟁사 첩보</h2><button onClick={()=>setModal(null)}><Icon name="XCircle" className="text-slate-400"/></button></div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                            {rival.emps.length===0 ? <p className="text-center text-slate-500 py-4 text-xs">직원 없음</p> : rival.emps.map(e => (
+                                <div key={e.id} className="bg-black/40 p-2 rounded flex justify-between items-center text-xs border border-red-900/30">
+                                    <div><span className={`${EMPLOYEE_TIERS[e.tier].color} font-bold mr-1`}>{EMPLOYEE_TIERS[e.tier].name}</span>{e.name} <span className="text-slate-400">| {getLoyaltyTrait(e.baseLoyalty)}</span></div>
+                                    <div className="flex gap-1">
+                                        <button onClick={()=>sabotage(e.id)} className="bg-red-900/50 text-red-200 px-2 py-1 rounded">이간질 <span className="block text-[9px]">-{fmtMoney(calculateSabotageCost(e, stage.difficulty))}</span></button>
+                                        <button onClick={()=>scout(e.id)} className="bg-indigo-900/50 text-indigo-200 px-2 py-1 rounded">스카웃 <span className="block text-[9px]">-{fmtMoney(calculateScoutCost(e, stage.difficulty))}</span></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className={`w-full max-w-[1280px] aspect-[16/10] max-h-screen bg-[#050505] shadow-2xl relative overflow-hidden flex flex-col p-4 md:p-8 transition-all duration-300 border border-slate-800 rounded-3xl ${flashClass}`}>
+                    <Toast msgs={toasts} />
+                    {modal === 'HR' && renderHRModal()}
+                    {modal === 'SPY' && renderSpyModal()}
+
+                    {/* Top Bar */}
+                    <div className="w-full flex justify-between items-end mb-6 z-10 shrink-0">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-gradient-to-br from-indigo-600 to-purple-800 p-3 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.4)]"><Icon name={stage.iconName} size={28} className="text-white"/></div>
+                            <div>
+                                <h1 className="text-3xl font-black font-orbitron text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-500 drop-shadow-sm">STAGE {stageIdx+1}: {stage.name}</h1>
+                                <div className="text-sm text-slate-400 font-exo flex items-center gap-2 mt-1"><span className="px-2 py-0.5 bg-emerald-900/30 border border-emerald-500/30 rounded text-emerald-400 text-xs font-bold">GOAL</span> {fmtMoney(stage.target)}</div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                             <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 gap-1 mb-1">
+                                {[0, 1, 2, 5].map((s) => (
+                                    <button key={s} onClick={() => { if (s === 0) setGameState("paused"); else { setSpeed(s); setGameState("playing"); } }} className={`px-3 py-1.5 rounded font-orbitron text-xs font-bold min-w-[3rem] transition-colors ${ (gameState === "paused" && s === 0) || (gameState === "playing" && speed === s) ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/30' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800' }`}>{s === 0 ? "PAUSE" : `x${s}`}</button>
+                                ))}
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500 font-bold font-orbitron tracking-widest mb-1">AVAILABLE FUNDS</p>
+                                <p className={`text-4xl font-bold font-orbitron ${res.cash < 0 ? 'text-red-500 text-shadow-red' : 'text-emerald-400 text-shadow-neon'}`}>{fmtMoney(res.cash)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Main Content Grid (No Scroll, Filled) */}
+                    <div className="flex-1 grid grid-cols-3 gap-6 min-h-0 relative z-10 pb-2">
+                        
+                        {/* 1. Purchase Panel */}
+                        <div className="glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-cyan-500 relative">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="ArrowRight" size={80} className="text-cyan-500 rotate-45"/></div>
+                            <h2 className="text-lg font-bold text-cyan-400 mb-6 flex items-center gap-2 font-orbitron z-10"><Icon name="ArrowRight" className="rotate-45" size={20}/> {stage.input} 구매</h2>
+                            <div className="flex-1 flex flex-col gap-4 justify-start z-10">
+                                <div className="info-box p-4 rounded-xl flex justify-between items-center">
+                                    <span className="text-xs text-slate-400 font-bold">현재 시세</span>
+                                    <span className={`text-2xl font-mono font-bold ${market.price > market.basePrice ? 'text-red-400' : 'text-white'}`}>{fmtMoney(market.price)}</span>
+                                </div>
+                                <div className="info-box p-4 rounded-xl flex justify-between items-center">
+                                    <span className="text-xs text-slate-400 font-bold">보유 재고</span>
+                                    <span className="text-2xl font-mono font-bold text-cyan-200">{res.input.toLocaleString()}</span>
+                                </div>
+                                <div className="flex-1 content-end">
+                                    <div className="grid grid-cols-3 gap-2 mt-auto">
+                                        {[10, 100, 500].map(amt => <button key={amt} onClick={() => buyInput(amt)} className="glass-button text-cyan-300 py-3 rounded-xl text-sm font-bold font-orbitron hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">+{amt}</button>)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. Production Panel */}
+                        <div className="glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-orange-500 relative">
+                             <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="Hammer" size={80} className="text-orange-500"/></div>
+                            <h2 className="text-lg font-bold text-orange-400 mb-6 flex items-center gap-2 font-orbitron z-10"><Icon name="Hammer" size={20}/> 생산 관리</h2>
+                            <div className="flex-1 flex flex-col gap-4 justify-between z-10">
+                                <button onClick={() => setModal('HR')} className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2 font-bold hover:scale-[1.02] transition-transform text-sm border border-orange-400/30">
+                                    <Icon name="Users" size={16} /> 인사 관리 <span className="bg-black/20 text-orange-100 text-xs px-2 py-0.5 rounded-full">{emps.length}명</span>
+                                </button>
+                                <div className="info-box p-3 rounded-xl">
+                                    <div className="flex justify-between mb-2"><span className="text-xs text-slate-400 font-bold">상품 품질</span><span className="text-lg font-bold text-yellow-400 font-mono flex items-center gap-1"><Icon name="Sparkles" size={14}/> {Math.floor(myQual).toLocaleString()}</span></div>
+                                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-500 to-yellow-400" style={{width: `${Math.min(100, myQual)}%`}}></div></div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-xs mb-1"><span className="text-slate-400 font-bold">일일 생산량</span><span className="text-orange-400 font-bold font-mono text-lg">{strat.prodRate} <span className="text-xs text-slate-500">/ 일</span></span></div>
+                                    <input type="range" min="0" max="100" value={strat.prodRate} onChange={(e) => setStrat({...strat, prodRate: Number(e.target.value)})} className="w-full accent-orange-500 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer"/>
+                                </div>
+                                <div className="info-box p-4 rounded-xl flex justify-between items-center mt-auto">
+                                    <span className="text-xs text-slate-400 font-bold">완제품 재고</span><span className="text-2xl font-bold text-orange-200 font-mono">{res.output.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Sales Panel */}
+                        <div className={`glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-red-500 relative ${100-rival.share <= 10 ? 'danger-pulse' : ''}`}>
+                             <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="Sword" size={80} className="text-red-500"/></div>
+                            <div className="flex justify-between items-center mb-6 z-10"><h2 className="text-lg font-bold text-red-400 flex items-center gap-2 font-orbitron"><Icon name="Sword" size={20}/> 경영 전쟁</h2><button onClick={() => setModal('SPY')} className="text-xs bg-red-900/30 text-red-300 px-3 py-1 rounded-full border border-red-500/30 hover:bg-red-900/60 hover:text-white transition-colors font-bold tracking-wider">SPY MODE</button></div>
+                            <div className="flex-1 flex flex-col gap-4 justify-between z-10">
+                                <div>
+                                    <div className="flex justify-between text-xs mb-2 font-exo"><span className="text-red-400 font-bold">VS {stage.rival} 자금력</span><span className="text-slate-400 font-mono">{fmtMoney(rival.cash)}</span></div>
+                                    <div className="w-full bg-slate-900/50 h-2 rounded-full overflow-hidden border border-slate-700"><div className="bg-red-500 h-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{ width: `${Math.max(0, (rival.cash / rival.maxCash) * 100)}%` }} /></div>
+                                </div>
+                                <div className="bg-slate-900 rounded-xl h-12 flex overflow-hidden border border-slate-600 relative shadow-inner">
+                                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 h-full flex items-center justify-start pl-4 text-xs font-bold text-white whitespace-nowrap font-orbitron" style={{ width: `${100 - rival.share}%` }}>ME {Math.floor(100 - rival.share)}%</div>
+                                    <div className="bg-slate-800 h-full flex items-center justify-end pr-4 text-xs font-bold text-slate-400 flex-1 whitespace-nowrap font-orbitron">{stage.rival} {Math.floor(rival.share)}%</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-auto">
+                                    <div className="bg-emerald-900/20 p-3 rounded-xl border border-emerald-500/30">
+                                        <p className="text-xs text-emerald-400 mb-2 font-bold">나의 가격 <span className="float-right font-mono text-white text-base">{fmtMoney(strat.price)}</span></p>
+                                        <input type="range" min="10" max="300" value={strat.price} onChange={(e) => setStrat({...strat, price: Number(e.target.value)})} className="w-full h-1.5 bg-emerald-900/50 rounded appearance-none cursor-pointer accent-emerald-400"/>
+                                        <div className="text-right text-[10px] text-emerald-200/70 font-bold font-mono mt-1">가성비 {((myValue).toFixed(0))}</div>
+                                    </div>
+                                    <div className="bg-red-900/20 p-3 rounded-xl border border-red-500/30">
+                                        <p className="text-xs text-red-400 mb-2 font-bold">경쟁사 <span className="float-right font-mono text-slate-300 text-base">{fmtMoney(Math.floor(rival.price))}</span></p>
+                                        <div className="w-full h-1.5 bg-red-900/30 rounded mt-3"></div>
+                                        <div className="text-right text-[10px] text-red-200/70 font-bold font-mono mt-1">가성비 {((rivalValue).toFixed(0))}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Overlays (Game Over / Clear) */}
+                    {(gameState === "gameClear" || gameState === "stageClear" || gameState === "bankrupt") && (
+                        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[100]">
+                            <div className="glass-panel p-8 rounded-3xl border-2 text-center max-w-md animate-bounce-in shadow-[0_0_80px_rgba(0,0,0,0.8)] flex flex-col items-center gap-6">
+                                {gameState === "bankrupt" && <><Icon name="AlertTriangle" size={64} className="text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]"/><div className="space-y-2"><h2 className="text-3xl font-bold text-white font-orbitron">BANKRUPTCY</h2><p className="text-slate-400">자금이 바닥났습니다.</p></div><button onClick={restartGame} className="bg-red-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-red-500 shadow-lg w-full transition-transform hover:scale-105">다시 도전</button></>}
+                                {gameState === "stageClear" && <><Icon name="Crown" size={64} className="text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.5)]"/><div className="space-y-2"><h2 className="text-3xl font-bold text-white font-orbitron">STAGE CLEAR!</h2><p className="text-slate-400">목표 자금 달성!</p></div><button onClick={nextLevel} className="bg-emerald-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-emerald-500 shadow-lg w-full flex items-center justify-center gap-2 transition-transform hover:scale-105">다음 단계 <Icon name="ArrowRight" size={20}/></button></>}
+                                {gameState === "gameClear" && <><Icon name="Crown" size={80} className="text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]"/><div className="space-y-2"><h2 className="text-4xl font-bold text-white font-orbitron tracking-tighter">LEGENDARY</h2><p className="text-slate-400">전설의 경영자가 되셨습니다.</p></div><button onClick={restartGame} className="bg-indigo-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-indigo-500 shadow-lg w-full transition-transform hover:scale-105">새 게임 시작</button></>}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

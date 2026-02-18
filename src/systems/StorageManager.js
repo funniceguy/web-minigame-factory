@@ -148,7 +148,7 @@ export class StorageManager {
      * Get game data
      */
     getGameData(gameId) {
-        return this.data.games[gameId] || this.createDefaultGameData(gameId);
+        return this.normalizeGameData(gameId, this.data.games[gameId]);
     }
 
     /**
@@ -161,7 +161,13 @@ export class StorageManager {
             totalScore: 0,
             playCount: 0,
             bestLevel: 1,
+            bestStage: 1,
             maxCombo: 0,
+            totalComboCount: 0,
+            totalStageClears: 0,
+            totalItemsCollected: 0,
+            itemStats: {},
+            lastSessionScore: 0,
             totalPlayTime: 0,
             lastPlayed: null,
             achievements: []
@@ -169,21 +175,44 @@ export class StorageManager {
     }
 
     /**
+     * Normalize game data shape for backward compatibility
+     */
+    normalizeGameData(gameId, gameData = {}) {
+        const defaults = this.createDefaultGameData(gameId);
+        const normalized = {
+            ...defaults,
+            ...(gameData || {}),
+            itemStats: {
+                ...defaults.itemStats,
+                ...(gameData?.itemStats || {})
+            }
+        };
+
+        if (!Array.isArray(normalized.achievements)) {
+            normalized.achievements = [];
+        }
+
+        return normalized;
+    }
+
+    /**
      * Update game data
      */
     updateGameData(gameId, updates) {
-        if (!this.data.games[gameId]) {
-            this.data.games[gameId] = this.createDefaultGameData(gameId);
-        }
-
-        this.data.games[gameId] = {
-            ...this.data.games[gameId],
+        const current = this.normalizeGameData(gameId, this.data.games[gameId]);
+        const next = {
+            ...current,
             ...updates,
+            itemStats: {
+                ...current.itemStats,
+                ...(updates?.itemStats || {})
+            },
             lastPlayed: Date.now()
         };
+        this.data.games[gameId] = next;
 
         this.set('games', this.data.games);
-        return this.data.games[gameId];
+        return next;
     }
 
     /**
@@ -191,36 +220,90 @@ export class StorageManager {
      */
     recordGameSession(gameId, sessionData) {
         const gameData = this.getGameData(gameId);
+        const normalizedItemCounts = this.normalizeItemCounts(sessionData?.itemCounts);
+        const normalizedItemsCollected = Number.isFinite(sessionData?.itemsCollected)
+            ? Math.max(0, Math.floor(sessionData.itemsCollected))
+            : Object.values(normalizedItemCounts).reduce((sum, count) => sum + count, 0);
+
+        const safeSession = {
+            score: Number.isFinite(sessionData?.score) ? sessionData.score : 0,
+            duration: Number.isFinite(sessionData?.duration) ? sessionData.duration : 0,
+            level: Number.isFinite(sessionData?.level) ? sessionData.level : 0,
+            maxCombo: Number.isFinite(sessionData?.maxCombo) ? sessionData.maxCombo : 0,
+            comboCount: Number.isFinite(sessionData?.comboCount)
+                ? Math.max(0, Math.floor(sessionData.comboCount))
+                : Math.max(0, Math.floor(sessionData?.maxCombo || 0)),
+            stageClears: Number.isFinite(sessionData?.stageClears)
+                ? Math.max(0, Math.floor(sessionData.stageClears))
+                : Math.max(0, Math.floor((sessionData?.level || 1) - 1)),
+            itemsCollected: normalizedItemsCollected,
+            itemCounts: normalizedItemCounts
+        };
+
+        const mergedItemStats = {
+            ...gameData.itemStats
+        };
+        for (const [itemId, count] of Object.entries(safeSession.itemCounts)) {
+            mergedItemStats[itemId] = (mergedItemStats[itemId] || 0) + count;
+        }
 
         const updates = {
             playCount: gameData.playCount + 1,
-            totalScore: gameData.totalScore + (sessionData.score || 0),
-            totalPlayTime: gameData.totalPlayTime + (sessionData.duration || 0)
+            totalScore: gameData.totalScore + safeSession.score,
+            totalPlayTime: gameData.totalPlayTime + safeSession.duration,
+            totalStageClears: gameData.totalStageClears + safeSession.stageClears,
+            totalComboCount: gameData.totalComboCount + safeSession.comboCount,
+            totalItemsCollected: gameData.totalItemsCollected + safeSession.itemsCollected,
+            itemStats: mergedItemStats,
+            lastSessionScore: safeSession.score
         };
 
         // Update high score
-        if (sessionData.score > gameData.highScore) {
-            updates.highScore = sessionData.score;
+        if (safeSession.score > gameData.highScore) {
+            updates.highScore = safeSession.score;
         }
 
         // Update best level
-        if (sessionData.level > gameData.bestLevel) {
-            updates.bestLevel = sessionData.level;
+        if (safeSession.level > gameData.bestLevel) {
+            updates.bestLevel = safeSession.level;
+        }
+
+        // Update best stage
+        if (safeSession.level > gameData.bestStage) {
+            updates.bestStage = safeSession.level;
         }
 
         // Update max combo
-        if (sessionData.maxCombo > gameData.maxCombo) {
-            updates.maxCombo = sessionData.maxCombo;
+        if (safeSession.maxCombo > gameData.maxCombo) {
+            updates.maxCombo = safeSession.maxCombo;
         }
 
         // Update profile totals
         this.updateProfile({
             totalGamesPlayed: this.data.profile.totalGamesPlayed + 1,
-            totalScore: this.data.profile.totalScore + (sessionData.score || 0),
-            totalPlayTime: this.data.profile.totalPlayTime + (sessionData.duration || 0)
+            totalScore: this.data.profile.totalScore + safeSession.score,
+            totalPlayTime: this.data.profile.totalPlayTime + safeSession.duration
         });
 
         return this.updateGameData(gameId, updates);
+    }
+
+    /**
+     * Normalize item counts object
+     */
+    normalizeItemCounts(itemCounts) {
+        if (!itemCounts || typeof itemCounts !== 'object') {
+            return {};
+        }
+
+        const normalized = {};
+        for (const [itemId, rawCount] of Object.entries(itemCounts)) {
+            if (!itemId) continue;
+            const count = Math.floor(Number(rawCount));
+            if (!Number.isFinite(count) || count <= 0) continue;
+            normalized[itemId] = count;
+        }
+        return normalized;
     }
 
     /**
@@ -230,6 +313,15 @@ export class StorageManager {
         return this.data.games;
     }
 
+    /**
+     * Get total play count across all games
+     */
+    getTotalPlayCount() {
+        return Object.values(this.data.games).reduce((total, game) => {
+            return total + (game.playCount || 0);
+        }, 0);
+    }
+
     // ===== Achievement Methods =====
 
     /**
@@ -237,6 +329,13 @@ export class StorageManager {
      */
     getAchievements(gameId) {
         return this.data.achievements[gameId] || [];
+    }
+
+    /**
+     * Get unlocked achievement count for a specific game
+     */
+    getGameAchievementCount(gameId) {
+        return this.getAchievements(gameId).length;
     }
 
     /**

@@ -1,173 +1,232 @@
 /**
- * AchievementSystem - Game achievement tracking and notifications
+ * AchievementSystem - game-specific achievement tracking and notifications
  */
 import { storage } from '../systems/StorageManager.js';
 
 export class AchievementSystem {
     constructor() {
-        // Achievement definitions by game
         this.definitions = new Map();
-
-        // Register default achievements
-        this.registerDefaultAchievements();
-
-        // Active achievement toast queue
         this.toastQueue = [];
         this.isShowingToast = false;
+
+        this.registerDefaultAchievements();
     }
 
     /**
-     * Register default achievements
+     * Register game-specific achievements.
+     * Every achievement is evaluated from stored cumulative game data.
      */
     registerDefaultAchievements() {
-        // Block Breaker achievements
-        this.register('block-breaker', [
-            { id: 'first_clear', name: '첫 클리어', desc: '첫 번째 레벨 클리어', icon: '🏆', points: 10 },
-            { id: 'combo_10', name: '콤보 마스터', desc: '10 콤보 달성', icon: '🔥', points: 20 },
-            { id: 'combo_20', name: '콤보 레전드', desc: '20 콤보 달성', icon: '💥', points: 50 },
-            { id: 'score_1000', name: '천점 돌파', desc: '1,000점 달성', icon: '⭐', points: 10 },
-            { id: 'score_5000', name: '오천점 돌파', desc: '5,000점 달성', icon: '✨', points: 25 },
-            { id: 'score_10000', name: '만점왕', desc: '10,000점 달성', icon: '🌟', points: 50 },
-            { id: 'score_50000', name: '레전드', desc: '50,000점 달성', icon: '👑', points: 100 },
-            { id: 'level_3', name: '중급자', desc: '레벨 3 도달', icon: '📈', points: 15 },
-            { id: 'level_5', name: '레벨왕', desc: '레벨 5 도달', icon: '🎯', points: 30 },
-            { id: 'level_10', name: '마스터', desc: '레벨 10 도달', icon: '🏅', points: 75 },
-            { id: 'play_10', name: '단골 플레이어', desc: '10회 플레이', icon: '🎮', points: 10 },
-            { id: 'play_50', name: '열정 플레이어', desc: '50회 플레이', icon: '❤️‍🔥', points: 30 },
-            { id: 'perfect_level', name: '퍼펙트', desc: '생명 손실 없이 클리어', icon: '💎', points: 40 },
-            { id: 'speed_clear', name: '스피드러너', desc: '30초 이내 클리어', icon: '⚡', points: 40 }
+        this.register('neon-block', [
+            { id: 'nb_play_1', name: 'First Brick', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nb_play_10', name: 'Brick Regular', desc: 'Play 10 times', icon: '*', points: 12, metric: 'playCount', threshold: 10 },
+            { id: 'nb_score_3000', name: 'Neon Starter', desc: 'High score 3,000', icon: '*', points: 10, metric: 'highScore', threshold: 3000 },
+            { id: 'nb_score_12000', name: 'Neon Ace', desc: 'High score 12,000', icon: '*', points: 24, metric: 'highScore', threshold: 12000 },
+            { id: 'nb_stage_25', name: 'Stage Crusher', desc: 'Total stage clears 25', icon: '*', points: 18, metric: 'totalStageClears', threshold: 25 },
+            { id: 'nb_combo_20', name: 'Combo Burst', desc: 'Max combo 20', icon: '*', points: 20, metric: 'maxCombo', threshold: 20 },
+            { id: 'nb_item_multiball_5', name: 'Multiball Collector', desc: 'Collect multiball 5 times', icon: '*', points: 15, metric: 'item.multiball', threshold: 5 },
+            { id: 'nb_item_shield_5', name: 'Shield Expert', desc: 'Collect shield 5 times', icon: '*', points: 15, metric: 'item.shield', threshold: 5 },
+            { id: 'nb_items_30', name: 'Loadout Builder', desc: 'Collect items 30 times', icon: '*', points: 20, metric: 'totalItemsCollected', threshold: 30 },
+            { id: 'nb_total_score_50000', name: 'Score Engineer', desc: 'Total score 50,000', icon: '*', points: 30, metric: 'totalScore', threshold: 50000 },
+            { id: 'nb_best_stage_15', name: 'Stage Veteran', desc: 'Best stage 15', icon: '*', points: 24, metric: 'bestStage', threshold: 15 }
         ]);
 
-        // Future games would have their achievements registered here
+        this.register('neon-findmine', [
+            { id: 'nf_play_1', name: 'Field Entry', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nf_play_8', name: 'Field Scout', desc: 'Play 8 times', icon: '*', points: 12, metric: 'playCount', threshold: 8 },
+            { id: 'nf_play_20', name: 'Field Veteran', desc: 'Play 20 times', icon: '*', points: 20, metric: 'playCount', threshold: 20 },
+            { id: 'nf_high_900', name: 'Clean Sweep', desc: 'High score 900', icon: '*', points: 16, metric: 'highScore', threshold: 900 },
+            { id: 'nf_total_stage_8', name: 'Clear Operator', desc: 'Total clears 8', icon: '*', points: 16, metric: 'totalStageClears', threshold: 8 },
+            { id: 'nf_total_stage_25', name: 'Mine Master', desc: 'Total clears 25', icon: '*', points: 30, metric: 'totalStageClears', threshold: 25 },
+            { id: 'nf_item_flag_40', name: 'Flag Specialist', desc: 'Use flag 40 times', icon: '*', points: 16, metric: 'item.flag', threshold: 40 },
+            { id: 'nf_best_stage_3', name: 'Hard Mode Clear', desc: 'Best stage 3', icon: '*', points: 26, metric: 'bestStage', threshold: 3 },
+            { id: 'nf_total_score_6000', name: 'Steady Solver', desc: 'Total score 6,000', icon: '*', points: 20, metric: 'totalScore', threshold: 6000 }
+        ]);
+
+        this.register('neon-slotmachine', [
+            { id: 'ns_play_1', name: 'First Spin', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'ns_play_15', name: 'Spin Addict', desc: 'Play 15 times', icon: '*', points: 14, metric: 'playCount', threshold: 15 },
+            { id: 'ns_high_3000', name: 'Cash Lift', desc: 'High score 3,000', icon: '*', points: 14, metric: 'highScore', threshold: 3000 },
+            { id: 'ns_high_9000', name: 'High Roller', desc: 'High score 9,000', icon: '*', points: 26, metric: 'highScore', threshold: 9000 },
+            { id: 'ns_stage_10', name: 'Stage Investor', desc: 'Total stage clears 10', icon: '*', points: 20, metric: 'totalStageClears', threshold: 10 },
+            { id: 'ns_item_spin_120', name: 'Chip Grinder', desc: 'Collect spin chip 120', icon: '*', points: 18, metric: 'item.spin_chip', threshold: 120 },
+            { id: 'ns_item_bingo_30', name: 'Line Hunter', desc: 'Bingo line 30', icon: '*', points: 20, metric: 'item.bingo', threshold: 30 },
+            { id: 'ns_item_skull_5', name: 'Skull Survivor', desc: 'Skull bingo 5', icon: '*', points: 18, metric: 'item.skull_bingo', threshold: 5 },
+            { id: 'ns_total_score_50000', name: 'Casino Veteran', desc: 'Total score 50,000', icon: '*', points: 32, metric: 'totalScore', threshold: 50000 },
+            { id: 'ns_best_stage_12', name: 'Stage Climber', desc: 'Best stage 12', icon: '*', points: 24, metric: 'bestStage', threshold: 12 }
+        ]);
+
+        this.register('neon-survivor', [
+            { id: 'nv_play_1', name: 'First Survival', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nv_play_10', name: 'Arena Regular', desc: 'Play 10 times', icon: '*', points: 14, metric: 'playCount', threshold: 10 },
+            { id: 'nv_high_20000', name: 'Danger Zone', desc: 'High score 20,000', icon: '*', points: 16, metric: 'highScore', threshold: 20000 },
+            { id: 'nv_high_60000', name: 'Hyper Core', desc: 'High score 60,000', icon: '*', points: 30, metric: 'highScore', threshold: 60000 },
+            { id: 'nv_stage_40', name: 'Wave Keeper', desc: 'Total stage clears 40', icon: '*', points: 18, metric: 'totalStageClears', threshold: 40 },
+            { id: 'nv_combo_25', name: 'Chain Spark', desc: 'Max combo 25', icon: '*', points: 20, metric: 'maxCombo', threshold: 25 },
+            { id: 'nv_combo_total_250', name: 'Chain Reactor', desc: 'Total combo 250', icon: '*', points: 24, metric: 'totalComboCount', threshold: 250 },
+            { id: 'nv_item_fireball_5', name: 'Missile Crafter', desc: 'Collect fireball 5 times', icon: '*', points: 18, metric: 'item.fireball', threshold: 5 },
+            { id: 'nv_item_ricochet_5', name: 'Ricochet Pilot', desc: 'Collect ricochet 5 times', icon: '*', points: 18, metric: 'item.ricochet', threshold: 5 },
+            { id: 'nv_items_35', name: 'Build Architect', desc: 'Collect items 35 times', icon: '*', points: 20, metric: 'totalItemsCollected', threshold: 35 },
+            { id: 'nv_total_score_150000', name: 'Arena Legend', desc: 'Total score 150,000', icon: '*', points: 36, metric: 'totalScore', threshold: 150000 },
+            { id: 'nv_best_stage_25', name: 'Wave Conqueror', desc: 'Best stage 25', icon: '*', points: 24, metric: 'bestStage', threshold: 25 }
+        ]);
     }
 
     /**
-     * Register achievements for a game
+     * Register achievements for game
      */
     register(gameId, achievements) {
         this.definitions.set(gameId, achievements);
     }
 
     /**
-     * Get all achievements for a game
+     * Check definition exists
+     */
+    hasDefinition(gameId, achievementId) {
+        return (this.definitions.get(gameId) || []).some((achievement) => achievement.id === achievementId);
+    }
+
+    /**
+     * Resolve metric value from stored game data
+     */
+    getMetricValue(metric, gameData) {
+        if (!metric || !gameData) return 0;
+
+        if (metric.startsWith('item.')) {
+            const itemId = metric.slice(5);
+            return Number(gameData.itemStats?.[itemId] || 0);
+        }
+
+        const scalarValue = Number(gameData[metric] || 0);
+        return Number.isFinite(scalarValue) ? scalarValue : 0;
+    }
+
+    /**
+     * Evaluate one achievement
+     */
+    evaluateAchievement(achievement, gameData) {
+        if (!achievement.metric || !Number.isFinite(achievement.threshold)) {
+            return false;
+        }
+        return this.getMetricValue(achievement.metric, gameData) >= achievement.threshold;
+    }
+
+    /**
+     * Get all achievements with unlock/current progress
      */
     getAll(gameId) {
         const definitions = this.definitions.get(gameId) || [];
-        const unlocked = storage.getAchievements(gameId);
+        const unlockedIds = storage.getAchievements(gameId);
+        const gameData = storage.getGameData(gameId);
 
-        return definitions.map(achievement => ({
-            ...achievement,
-            unlocked: unlocked.includes(achievement.id),
-            unlockedAt: null // Could be stored if we track timestamps
-        }));
+        return definitions.map((achievement) => {
+            const current = this.getMetricValue(achievement.metric, gameData);
+            const threshold = Number(achievement.threshold || 0);
+            return {
+                ...achievement,
+                current,
+                threshold,
+                unlocked: unlockedIds.includes(achievement.id)
+            };
+        });
     }
 
     /**
-     * Get unlocked achievements for a game
+     * Get unlocked achievements
      */
     getUnlocked(gameId) {
-        const all = this.getAll(gameId);
-        return all.filter(a => a.unlocked);
+        return this.getAll(gameId).filter((achievement) => achievement.unlocked);
     }
 
     /**
-     * Get locked achievements for a game
-     */
-    getLocked(gameId) {
-        const all = this.getAll(gameId);
-        return all.filter(a => !a.unlocked);
-    }
-
-    /**
-     * Get total achievement progress
+     * Get progress summary
      */
     getProgress(gameId) {
         const all = this.getAll(gameId);
-        const unlocked = all.filter(a => a.unlocked).length;
+        const unlocked = all.filter((achievement) => achievement.unlocked).length;
+        const total = all.length;
         return {
             unlocked,
-            total: all.length,
-            percentage: all.length > 0 ? Math.round((unlocked / all.length) * 100) : 0
+            total,
+            percentage: total > 0 ? Math.round((unlocked / total) * 100) : 0
         };
     }
 
     /**
-     * Get total points for a game
+     * Get progress summary across games
      */
-    getPoints(gameId) {
-        const unlocked = this.getUnlocked(gameId);
-        return unlocked.reduce((sum, a) => sum + (a.points || 0), 0);
+    getTotalProgress(gameIds = []) {
+        const targets = gameIds.length > 0 ? gameIds : Array.from(this.definitions.keys());
+        const summary = targets.reduce((acc, gameId) => {
+            const progress = this.getProgress(gameId);
+            acc.unlocked += progress.unlocked;
+            acc.total += progress.total;
+            return acc;
+        }, { unlocked: 0, total: 0 });
+
+        return {
+            ...summary,
+            percentage: summary.total > 0 ? Math.round((summary.unlocked / summary.total) * 100) : 0
+        };
     }
 
     /**
-     * Unlock an achievement
-     * @returns {boolean} True if newly unlocked
+     * Unlock one achievement
      */
     unlock(gameId, achievementId) {
-        const wasUnlocked = storage.hasAchievement(gameId, achievementId);
-
-        if (!wasUnlocked) {
-            const success = storage.unlockAchievement(gameId, achievementId);
-
-            if (success) {
-                const achievement = this.definitions.get(gameId)?.find(a => a.id === achievementId);
-                if (achievement) {
-                    this.showUnlockToast(achievement);
-                }
-                return true;
-            }
+        if (!this.hasDefinition(gameId, achievementId)) {
+            return false;
         }
 
-        return false;
+        if (storage.hasAchievement(gameId, achievementId)) {
+            return false;
+        }
+
+        const saved = storage.unlockAchievement(gameId, achievementId);
+        if (!saved) {
+            return false;
+        }
+
+        const achievement = this.definitions
+            .get(gameId)
+            ?.find((item) => item.id === achievementId);
+
+        if (achievement) {
+            this.showUnlockToast(achievement);
+        }
+        return true;
     }
 
     /**
-     * Check and unlock multiple achievements based on game result
+     * Evaluate all achievements for a game using latest stored data
      */
-    checkAndUnlock(gameId, result) {
-        const unlocked = [];
-
-        // Score-based achievements
-        if (result.score >= 1000) unlocked.push(this.unlock(gameId, 'score_1000'));
-        if (result.score >= 5000) unlocked.push(this.unlock(gameId, 'score_5000'));
-        if (result.score >= 10000) unlocked.push(this.unlock(gameId, 'score_10000'));
-        if (result.score >= 50000) unlocked.push(this.unlock(gameId, 'score_50000'));
-
-        // Level-based achievements
-        if (result.level >= 1) unlocked.push(this.unlock(gameId, 'first_clear'));
-        if (result.level >= 3) unlocked.push(this.unlock(gameId, 'level_3'));
-        if (result.level >= 5) unlocked.push(this.unlock(gameId, 'level_5'));
-        if (result.level >= 10) unlocked.push(this.unlock(gameId, 'level_10'));
-
-        // Combo-based achievements
-        if (result.maxCombo >= 10) unlocked.push(this.unlock(gameId, 'combo_10'));
-        if (result.maxCombo >= 20) unlocked.push(this.unlock(gameId, 'combo_20'));
-
-        // Play count achievements
+    checkAndUnlock(gameId) {
+        const definitions = this.definitions.get(gameId) || [];
         const gameData = storage.getGameData(gameId);
-        if (gameData.playCount >= 10) unlocked.push(this.unlock(gameId, 'play_10'));
-        if (gameData.playCount >= 50) unlocked.push(this.unlock(gameId, 'play_50'));
+        let unlockedCount = 0;
 
-        // Special achievements
-        if (result.perfectLevel) unlocked.push(this.unlock(gameId, 'perfect_level'));
-        if (result.clearTime && result.clearTime <= 30) unlocked.push(this.unlock(gameId, 'speed_clear'));
+        definitions.forEach((achievement) => {
+            if (!this.evaluateAchievement(achievement, gameData)) return;
+            if (this.unlock(gameId, achievement.id)) {
+                unlockedCount += 1;
+            }
+        });
 
-        return unlocked.filter(Boolean).length;
+        return unlockedCount;
     }
 
     /**
-     * Show achievement unlock toast
+     * Queue unlock toast
      */
     showUnlockToast(achievement) {
         this.toastQueue.push(achievement);
-
         if (!this.isShowingToast) {
             this.processToastQueue();
         }
     }
 
     /**
-     * Process toast queue
+     * Show queued toasts sequentially
      */
     async processToastQueue() {
         if (this.toastQueue.length === 0) {
@@ -177,24 +236,21 @@ export class AchievementSystem {
 
         this.isShowingToast = true;
         const achievement = this.toastQueue.shift();
-
         await this.displayToast(achievement);
-
-        // Process next toast
         this.processToastQueue();
     }
 
     /**
-     * Display achievement toast
+     * Render toast
      */
     displayToast(achievement) {
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
             const toast = document.createElement('div');
             toast.className = 'achievement-toast animate-slideInRight';
             toast.innerHTML = `
                 <div class="achievement-icon">${achievement.icon}</div>
                 <div class="achievement-info">
-                    <div class="achievement-label">업적 달성!</div>
+                    <div class="achievement-label">ACHIEVEMENT UNLOCKED</div>
                     <div class="achievement-name">${achievement.name}</div>
                     <div class="achievement-desc">${achievement.desc}</div>
                 </div>
@@ -204,27 +260,26 @@ export class AchievementSystem {
             this.addToastStyles();
             document.body.appendChild(toast);
 
-            // Auto remove after delay
             setTimeout(() => {
                 toast.classList.remove('animate-slideInRight');
                 toast.classList.add('animate-slideOutRight');
                 setTimeout(() => {
                     toast.remove();
                     resolve();
-                }, 400);
-            }, 3000);
+                }, 280);
+            }, 2600);
         });
     }
 
     /**
-     * Add toast styles
+     * Add toast styles once
      */
     addToastStyles() {
         if (document.getElementById('achievement-toast-styles')) return;
 
-        const styles = document.createElement('style');
-        styles.id = 'achievement-toast-styles';
-        styles.textContent = `
+        const style = document.createElement('style');
+        style.id = 'achievement-toast-styles';
+        style.textContent = `
             .achievement-toast {
                 position: fixed;
                 top: 20px;
@@ -232,92 +287,80 @@ export class AchievementSystem {
                 display: flex;
                 align-items: center;
                 gap: 12px;
-                padding: 16px 20px;
-                background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1));
-                border: 1px solid rgba(255, 215, 0, 0.3);
+                padding: 14px 16px;
+                max-width: 380px;
+                background: linear-gradient(135deg, rgba(0, 242, 255, 0.2), rgba(255, 0, 255, 0.18));
+                border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 12px;
-                backdrop-filter: blur(20px);
-                box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+                backdrop-filter: blur(14px);
+                box-shadow: 0 0 30px rgba(0, 242, 255, 0.22);
                 z-index: 9999;
-                max-width: 320px;
             }
-            
+
             .achievement-icon {
-                font-size: 2rem;
-                animation: bounce 0.5s ease-in-out;
+                font-size: 1.8rem;
+                line-height: 1;
             }
-            
+
             .achievement-info {
                 flex: 1;
+                min-width: 0;
             }
-            
+
             .achievement-label {
-                font-size: 0.7rem;
+                font-size: 0.62rem;
+                color: rgba(255, 255, 255, 0.75);
+                letter-spacing: 0.08em;
                 text-transform: uppercase;
-                letter-spacing: 0.1em;
-                color: #ffd700;
                 margin-bottom: 2px;
             }
-            
+
             .achievement-name {
-                font-family: 'Orbitron', sans-serif;
-                font-size: 1rem;
-                font-weight: bold;
-                color: #fff;
+                font-size: 0.95rem;
+                font-weight: 700;
+                color: #ffffff;
+                margin-bottom: 1px;
             }
-            
+
             .achievement-desc {
                 font-size: 0.75rem;
-                color: rgba(255, 255, 255, 0.7);
+                color: rgba(255, 255, 255, 0.72);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
-            
+
             .achievement-points {
-                font-family: 'Orbitron', sans-serif;
-                font-size: 1rem;
-                font-weight: bold;
-                color: #ffd700;
+                font-family: var(--font-display, 'Orbitron', sans-serif);
+                font-weight: 700;
+                color: #fff485;
+                text-shadow: 0 0 10px rgba(255, 244, 133, 0.5);
             }
-            
+
             @keyframes slideInRight {
-                from {
-                    transform: translateX(120%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
+                from { transform: translateX(120%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
             }
-            
+
             @keyframes slideOutRight {
-                from {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
-                to {
-                    transform: translateX(120%);
-                    opacity: 0;
-                }
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(120%); opacity: 0; }
             }
-            
+
             .animate-slideInRight {
-                animation: slideInRight 0.4s ease forwards;
+                animation: slideInRight 0.28s ease forwards;
             }
-            
+
             .animate-slideOutRight {
-                animation: slideOutRight 0.4s ease forwards;
-            }
-            
-            @keyframes bounce {
-                0%, 100% { transform: scale(1); }
-                50% { transform: scale(1.2); }
+                animation: slideOutRight 0.28s ease forwards;
             }
         `;
-        document.head.appendChild(styles);
+
+        document.head.appendChild(style);
     }
 
     /**
-     * Render achievements list for UI
+     * Render achievement list HTML for popup
      */
     renderAchievementsList(gameId) {
         const achievements = this.getAll(gameId);
@@ -331,16 +374,22 @@ export class AchievementSystem {
                 </div>
             </div>
             <div class="achievements-grid">
-                ${achievements.map(a => `
-                    <div class="achievement-item ${a.unlocked ? 'unlocked' : 'locked'}">
-                        <div class="achievement-item-icon">${a.unlocked ? a.icon : '🔒'}</div>
-                        <div class="achievement-item-info">
-                            <div class="achievement-item-name">${a.unlocked ? a.name : '???'}</div>
-                            <div class="achievement-item-desc">${a.unlocked ? a.desc : '미해금'}</div>
+                ${achievements.map((achievement) => {
+                    const isLocked = !achievement.unlocked;
+                    const progressText = achievement.threshold > 0
+                        ? `${Math.min(achievement.current, achievement.threshold)}/${achievement.threshold}`
+                        : '';
+                    return `
+                        <div class="achievement-item ${achievement.unlocked ? 'unlocked' : 'locked'}">
+                            <div class="achievement-item-icon">${achievement.unlocked ? achievement.icon : '🔒'}</div>
+                            <div class="achievement-item-info">
+                                <div class="achievement-item-name">${isLocked ? 'Locked Achievement' : achievement.name}</div>
+                                <div class="achievement-item-desc">${isLocked ? achievement.desc : achievement.desc}</div>
+                            </div>
+                            <div class="achievement-item-points">${achievement.unlocked ? `+${achievement.points || 0}` : progressText}</div>
                         </div>
-                        ${a.unlocked ? `<div class="achievement-item-points">+${a.points}</div>` : ''}
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         `;
     }

@@ -1,0 +1,209 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JSX Runner</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #root {
+            width: 100%;
+            height: 100%;
+        }
+
+        .runner-error {
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-family: sans-serif;
+            background: #111;
+            padding: 16px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+        window.tailwind = window.tailwind || {};
+        window.tailwind.config = {
+            darkMode: 'class'
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        (() => {
+            const root = document.getElementById('root');
+            const params = (() => {
+                const queryParams = new URLSearchParams(window.location.search || '');
+                if (queryParams.has('script') || queryParams.has('gameId') || queryParams.has('html')) {
+                    return queryParams;
+                }
+
+                const hash = window.location.hash.startsWith('#')
+                    ? window.location.hash.slice(1)
+                    : '';
+                if (!hash) return queryParams;
+
+                const hashParams = new URLSearchParams(hash);
+                if (hashParams.has('script') || hashParams.has('gameId') || hashParams.has('html')) {
+                    return hashParams;
+                }
+
+                return queryParams;
+            })();
+            const script = params.get('script');
+
+            const showError = (message, detail = '') => {
+                root.innerHTML = `
+                    <div class="runner-error">
+                        <div>
+                            <div style="font-weight:700; margin-bottom:8px;">${message}</div>
+                            ${detail ? `<div style="font-size:12px; color:rgba(255,255,255,0.75);">${detail}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            };
+
+            if (!script) {
+                showError('Missing `script` query parameter.');
+                return;
+            }
+
+            window.__MGP_RUNNER_PARAMS__ = Object.fromEntries(params.entries());
+            document.documentElement.classList.add('dark');
+
+            const refreshTailwind = () => {
+                try {
+                    if (window.tailwind && typeof window.tailwind.refresh === 'function') {
+                        window.tailwind.refresh();
+                    } else if (window.tailwindCSS && typeof window.tailwindCSS.refresh === 'function') {
+                        window.tailwindCSS.refresh();
+                    }
+                } catch (error) {
+                    // Tailwind refresh is best-effort for dynamically rendered JSX.
+                }
+            };
+
+            const run = async () => {
+                try {
+                    const response = await fetch(script, { cache: 'no-store' });
+                    if (!response.ok) {
+                        throw new Error(`Failed to load script: ${response.status} ${response.statusText}`);
+                    }
+
+                    const sourceCode = await response.text();
+                    const transformed = Babel.transform(sourceCode, {
+                        presets: [
+                            ['react', { runtime: 'classic' }],
+                            ['typescript', { isTSX: true, allExtensions: true }]
+                        ],
+                        plugins: ['transform-modules-commonjs'],
+                        sourceType: 'module'
+                    }).code;
+
+                    const module = { exports: {} };
+                    const lucideReactShim = new Proxy({}, {
+                        get: (_, prop) => {
+                            if (prop === '__esModule') return true;
+                            if (prop === 'default') return {};
+
+                            return (props = {}) => {
+                                const {
+                                    size = 16,
+                                    color = 'currentColor',
+                                    className = '',
+                                    style = {},
+                                    ...rest
+                                } = props;
+
+                                return React.createElement(
+                                    'span',
+                                    {
+                                        ...rest,
+                                        className,
+                                        'aria-hidden': 'true',
+                                        style: {
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: size,
+                                            height: size,
+                                            color,
+                                            lineHeight: 1,
+                                            fontSize: Math.max(10, Math.round(size * 0.75)),
+                                            ...style
+                                        }
+                                    },
+                                    '◆'
+                                );
+                            };
+                        }
+                    });
+
+                    const localRequire = (name) => {
+                        if (name === 'react') return React;
+                        if (name === 'react-dom') return ReactDOM;
+                        if (name === 'react-dom/client') return ReactDOM;
+                        if (name === 'lucide-react') return lucideReactShim;
+                        throw new Error(`Unsupported import: ${name}`);
+                    };
+
+                    const execute = new Function(
+                        'module',
+                        'exports',
+                        'require',
+                        'React',
+                        'ReactDOM',
+                        'window',
+                        'document',
+                        transformed
+                    );
+
+                    execute(
+                        module,
+                        module.exports,
+                        localRequire,
+                        React,
+                        ReactDOM,
+                        window,
+                        document
+                    );
+
+                    refreshTailwind();
+
+                    const exportedComponent = module.exports?.default || module.exports;
+                    const hasMountedContent = root.childNodes.length > 0;
+
+                    if (!hasMountedContent && typeof exportedComponent === 'function') {
+                        ReactDOM.createRoot(root).render(React.createElement(exportedComponent));
+                        refreshTailwind();
+                        setTimeout(refreshTailwind, 0);
+                    }
+                } catch (error) {
+                    console.error('JSX runner failed:', error);
+                    showError('Failed to run JSX file.', error?.message || String(error));
+                }
+            };
+
+            run();
+        })();
+    </script>
+</body>
+</html>

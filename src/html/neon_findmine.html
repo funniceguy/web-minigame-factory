@@ -446,6 +446,102 @@
     // 초기 실행
     initGame();
 </script>
+<script>
+    (() => {
+        if (window.__mgpBridgeInstalled) return;
+        window.__mgpBridgeInstalled = true;
+
+        const metrics = {
+            startedAt: Date.now(),
+            stageClears: 0,
+            itemsCollected: 0,
+            itemCounts: {},
+            lastScore: 0,
+            bestStage: 1,
+            sent: false
+        };
+
+        const difficultyLevel = (mode) => {
+            if (mode === 'hard') return 3;
+            if (mode === 'medium') return 2;
+            return 1;
+        };
+
+        const addItem = (itemId, count = 1) => {
+            if (!itemId) return;
+            const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+            metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
+            metrics.itemsCollected += safeCount;
+        };
+
+        const calcScore = (win) => {
+            const mult = difficultyLevel(curMode);
+            if (win) {
+                return Math.floor((revealed * 12) + Math.max(0, (1200 - (time * 3)) * mult));
+            }
+            return Math.floor(revealed * 2);
+        };
+
+        const snapshot = () => ({
+            score: Math.floor(metrics.lastScore || 0),
+            level: Math.floor(metrics.bestStage || 1),
+            maxCombo: 0,
+            comboCount: 0,
+            stageClears: Math.floor(metrics.stageClears),
+            itemsCollected: Math.floor(metrics.itemsCollected),
+            itemCounts: { ...metrics.itemCounts },
+            duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
+        });
+
+        const postResult = (force = false) => {
+            if (metrics.sent && !force) return;
+            parent.postMessage({
+                source: 'mgp-game',
+                type: 'result',
+                payload: snapshot()
+            }, '*');
+            metrics.sent = true;
+        };
+
+        if (typeof onRightClick === 'function') {
+            const originalOnRightClick = onRightClick;
+            onRightClick = function () {
+                const beforeFlags = flags;
+                const result = originalOnRightClick.apply(this, arguments);
+                if (flags > beforeFlags) {
+                    addItem('flag', flags - beforeFlags);
+                }
+                return result;
+            };
+        }
+
+        if (typeof endGame === 'function') {
+            const originalEndGame = endGame;
+            endGame = function (win) {
+                const result = originalEndGame.apply(this, arguments);
+                metrics.lastScore = calcScore(Boolean(win));
+                metrics.bestStage = Math.max(metrics.bestStage, difficultyLevel(curMode));
+                if (win) {
+                    metrics.stageClears += 1;
+                }
+                postResult();
+                return result;
+            };
+        }
+
+        if (typeof initGame === 'function') {
+            const originalInitGame = initGame;
+            initGame = function () {
+                metrics.startedAt = Date.now();
+                metrics.sent = false;
+                return originalInitGame.apply(this, arguments);
+            };
+        }
+
+        window.__mgpSnapshot = snapshot;
+        window.addEventListener('beforeunload', () => postResult(true));
+    })();
+</script>
 
 </body>
 </html>

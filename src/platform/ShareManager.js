@@ -8,12 +8,12 @@ export class ShareManager {
 
         // Challenge phrases for viral sharing
         this.challengePhrases = [
-            '이 점수 깰 수 있어? 🔥',
-            '나를 이겨봐! 💪',
-            '도전해봐! 🎮',
-            '이거 진짜 어려워... 😅',
-            '새 기록 달성! 🏆',
-            '너도 할 수 있어? 🤔'
+            'Can you beat this score?',
+            'Try one more run!',
+            'Challenge accepted!',
+            'This one is harder than it looks.',
+            'New record unlocked!',
+            'Beat me if you can!'
         ];
     }
 
@@ -43,8 +43,8 @@ export class ShareManager {
         modal.innerHTML = `
             <div class="share-modal glass-modal animate-fadeInScale">
                 <div class="share-header">
-                    <h2 class="font-display neon-text-cyan">점수 공유하기</h2>
-                    <button class="close-btn glass-btn" id="closeShareBtn">✕</button>
+                    <h2 class="font-display neon-text-cyan">Share Score</h2>
+                    <button class="close-btn glass-btn" id="closeShareBtn">Close</button>
                 </div>
                 
                 <div class="share-content">
@@ -52,22 +52,22 @@ export class ShareManager {
                         <img class="share-preview" style="display: none;" alt="Share preview">
                         <div class="share-loading">
                             <div class="spinner animate-spin"></div>
-                            <span>이미지 생성 중...</span>
+                            <span>Generating image...</span>
                         </div>
                     </div>
                     
                     <div class="share-stats glass-card">
                         <div class="share-stat">
-                            <span class="label">게임</span>
+                            <span class="label">Game</span>
                             <span class="value">${data.gameName}</span>
                         </div>
                         <div class="share-stat">
-                            <span class="label">최고 점수</span>
+                            <span class="label">High Score</span>
                             <span class="value neon-text-yellow">${data.highScore.toLocaleString()}</span>
                         </div>
                         <div class="share-stat">
-                            <span class="label">플레이</span>
-                            <span class="value">${data.playCount}회</span>
+                            <span class="label">Plays</span>
+                            <span class="value">${data.playCount}x</span>
                         </div>
                     </div>
                     
@@ -77,7 +77,7 @@ export class ShareManager {
                     
                     <div class="share-buttons">
                         <button class="share-btn-item glass-btn" data-platform="twitter">
-                            <span class="icon">𝕏</span>
+                            <span class="icon">X</span>
                             <span>Twitter</span>
                         </button>
                         <button class="share-btn-item glass-btn" data-platform="facebook">
@@ -85,17 +85,17 @@ export class ShareManager {
                             <span>Facebook</span>
                         </button>
                         <button class="share-btn-item glass-btn" data-platform="kakao">
-                            <span class="icon">💬</span>
-                            <span>카카오톡</span>
+                            <span class="icon">K</span>
+                            <span>KakaoTalk</span>
                         </button>
                         <button class="share-btn-item glass-btn" data-platform="copy">
-                            <span class="icon">📋</span>
-                            <span>링크 복사</span>
+                            <span class="icon">#</span>
+                            <span>Copy Link</span>
                         </button>
                     </div>
                     
                     <button class="download-btn neon-btn" id="downloadImageBtn">
-                        📥 이미지 저장
+                        Download Image
                     </button>
                 </div>
             </div>
@@ -327,7 +327,7 @@ export class ShareManager {
         ctx.shadowColor = '#ff00ff';
         ctx.shadowBlur = 10;
         ctx.textAlign = 'left';
-        ctx.fillText(`🎮 ${data.playerName}`, 30, 270);
+        ctx.fillText(`PLAYER ${data.playerName}`, 30, 270);
         ctx.shadowBlur = 0;
 
         // Challenge text
@@ -371,12 +371,12 @@ export class ShareManager {
      */
     share(platform, data) {
         const url = this.generateShareUrl(data);
-        const text = `🎮 ${data.gameName}에서 ${data.highScore.toLocaleString()}점 달성! ${this.getRandomPhrase()}`;
+        const text = '[MINIGAME] ' + data.gameName + ' - ' + data.highScore.toLocaleString() + ' points! ' + this.getRandomPhrase();
 
         switch (platform) {
             case 'twitter':
                 window.open(
-                    `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,
+                    'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url),
                     '_blank',
                     'width=600,height=400'
                 );
@@ -384,7 +384,7 @@ export class ShareManager {
 
             case 'facebook':
                 window.open(
-                    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`,
+                    'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url) + '&quote=' + encodeURIComponent(text),
                     '_blank',
                     'width=600,height=400'
                 );
@@ -393,13 +393,13 @@ export class ShareManager {
             case 'kakao':
                 // Kakao SDK would be integrated here
                 // For now, copy link as fallback
-                this.copyToClipboard(`${text}\n${url}`);
-                this.showToast('링크가 복사되었습니다! 카카오톡에 붙여넣기 하세요.');
+                this.copyToClipboard(text + '\n' + url);
+                this.showToast('Link copied. Paste it in KakaoTalk.');
                 break;
 
             case 'copy':
                 this.copyToClipboard(url);
-                this.showToast('링크가 복사되었습니다!');
+                this.showToast('Link copied.');
                 break;
         }
     }

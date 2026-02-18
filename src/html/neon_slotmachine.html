@@ -637,5 +637,120 @@
         // --- Start Game ---
         window.onload = init;
     </script>
+    <script>
+        (() => {
+            if (window.__mgpBridgeInstalled) return;
+            window.__mgpBridgeInstalled = true;
+
+            const metrics = {
+                startedAt: Date.now(),
+                stageClears: 0,
+                itemsCollected: 0,
+                itemCounts: {},
+                sent: false
+            };
+
+            const addItem = (itemId, count = 1) => {
+                if (!itemId) return;
+                const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+                metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
+                metrics.itemsCollected += safeCount;
+            };
+
+            const countLines = () => {
+                let regular = 0;
+                let skull = 0;
+                if (!Array.isArray(state?.currentSlots)) return { regular, skull };
+
+                BINGO_LINES.forEach((line) => {
+                    const [a, b, c] = line;
+                    const symbol = state.currentSlots[a];
+                    if (!symbol) return;
+                    if (state.currentSlots[a] !== state.currentSlots[b] || state.currentSlots[b] !== state.currentSlots[c]) return;
+                    const score = Number(SYMBOL_SCORES[symbol] || 0);
+                    if (score < 0) skull += 1;
+                    if (score > 0) regular += 1;
+                });
+
+                return { regular, skull };
+            };
+
+            const snapshot = () => ({
+                score: Math.floor(Number(state?.money || 0)),
+                level: Math.floor(Number(state?.stage || 1)),
+                maxCombo: 0,
+                comboCount: 0,
+                stageClears: Math.floor(metrics.stageClears),
+                itemsCollected: Math.floor(metrics.itemsCollected),
+                itemCounts: { ...metrics.itemCounts },
+                duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
+            });
+
+            const postResult = (force = false) => {
+                if (metrics.sent && !force) return;
+                parent.postMessage({
+                    source: 'mgp-game',
+                    type: 'result',
+                    payload: snapshot()
+                }, '*');
+                metrics.sent = true;
+            };
+
+            if (typeof spin === 'function') {
+                const originalSpin = spin;
+                spin = async function () {
+                    addItem('spin_chip', 1);
+                    return originalSpin.apply(this, arguments);
+                };
+            }
+
+            if (typeof checkWins === 'function') {
+                const originalCheckWins = checkWins;
+                checkWins = async function () {
+                    const result = await originalCheckWins.apply(this, arguments);
+                    const lines = countLines();
+                    if (lines.regular > 0) addItem('bingo', lines.regular);
+                    if (lines.skull > 0) addItem('skull_bingo', lines.skull);
+                    return result;
+                };
+            }
+
+            if (typeof showOverlay === 'function') {
+                const originalShowOverlay = showOverlay;
+                showOverlay = function (title) {
+                    const result = originalShowOverlay.apply(this, arguments);
+                    if (String(title).toUpperCase().includes('GAME OVER')) {
+                        postResult();
+                    }
+                    return result;
+                };
+            }
+
+            if (elements?.overlayBtn) {
+                const originalOverlayClick = elements.overlayBtn.onclick;
+                elements.overlayBtn.onclick = function () {
+                    const beforeStage = Math.floor(Number(state?.stage || 1));
+                    const result = originalOverlayClick?.apply(this, arguments);
+                    const afterStage = Math.floor(Number(state?.stage || 1));
+                    if (afterStage > beforeStage) {
+                        metrics.stageClears += (afterStage - beforeStage);
+                    }
+                    return result;
+                };
+            }
+
+            if (typeof init === 'function') {
+                const originalInit = init;
+                init = function () {
+                    metrics.startedAt = Date.now();
+                    metrics.sent = false;
+                    return originalInit.apply(this, arguments);
+                };
+            }
+
+            window.__mgpSnapshot = snapshot;
+            window.addEventListener('beforeunload', () => postResult(true));
+        })();
+    </script>
 </body>
 </html>

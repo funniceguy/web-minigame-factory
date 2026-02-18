@@ -4,18 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
-    <meta name="description" content="MINIGAME FACTORY - 다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    <meta name="description" content="MINIGAME FACTORY - Play multiple mini games and share your scores.">
     
     <!-- Open Graph / SNS Share -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="MINIGAME FACTORY">
-    <meta property="og:description" content="다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    <meta property="og:description" content="Play multiple mini games and share your scores.">
     <meta property="og:image" content="./public/assets/images/og-image.png">
     
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="MINIGAME FACTORY">
-    <meta name="twitter:description" content="다양한 미니게임을 플레이하고 친구들과 점수를 공유하세요!">
+    <meta name="twitter:description" content="Play multiple mini games and share your scores.">
     
     <title>MINIGAME FACTORY</title>
     
@@ -158,7 +158,7 @@
             <div class="bottom">FACTORY</div>
         </div>
         <div class="loading-spinner"></div>
-        <div class="loading-text">로딩 중...</div>
+        <div class="loading-text">Loading...</div>
     </div>
     
     <!-- Background Effects -->
@@ -206,14 +206,14 @@
             modal.className = 'modal-overlay glass-overlay animate-fadeIn';
             modal.innerHTML = `
                 <div class="glass-modal animate-fadeInScale" style="padding: var(--space-6); max-width: 320px; margin: auto; text-align: center;">
-                    <div style="font-size: 3rem; margin-bottom: var(--space-3);">🔥</div>
-                    <h2 class="font-display neon-text-pink" style="margin-bottom: var(--space-2);">도전장이 도착했습니다!</h2>
+                    <div style="font-size: 3rem; margin-bottom: var(--space-3);">!</div>
+                    <h2 class="font-display neon-text-pink" style="margin-bottom: var(--space-2);">Challenge Incoming!</h2>
                     <p class="text-secondary" style="margin-bottom: var(--space-4);">
-                        누군가 당신에게 도전했습니다!<br>
-                        목표 점수: <span class="neon-text-yellow font-display">${parseInt(challengeScore || 0).toLocaleString()}</span>
+                        A friend challenged your record!<br>
+                        Target score: <span class="neon-text-yellow font-display">${parseInt(challengeScore || 0).toLocaleString()}</span>
                     </p>
                     <button class="neon-btn" style="width: 100%;" onclick="this.closest('.modal-overlay').remove()">
-                        도전 수락! 🎮
+                        Accept Challenge
                     </button>
                 </div>
             `;

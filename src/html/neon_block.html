@@ -1016,5 +1016,101 @@
         requestAnimationFrame(loop);
 
     </script>
+    <script>
+        (function () {
+            if (window.__mgpBridgeInstalled) return;
+            window.__mgpBridgeInstalled = true;
+
+            const metrics = {
+                startedAt: Date.now(),
+                stageClears: 0,
+                maxCombo: 0,
+                itemsCollected: 0,
+                itemCounts: {},
+                sent: false
+            };
+
+            function addItem(itemId, count = 1) {
+                if (!itemId) return;
+                const safeCount = Math.max(1, Math.floor(Number(count) || 1));
+                metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
+                metrics.itemsCollected += safeCount;
+            }
+
+            function updateLiveMetrics() {
+                try {
+                    metrics.maxCombo = Math.max(metrics.maxCombo, Number(gameState?.combo || 0));
+                } catch (error) {
+                    // no-op
+                }
+            }
+
+            function buildSnapshot() {
+                updateLiveMetrics();
+                const level = Number(gameState?.level || 1);
+                return {
+                    score: Math.floor(Number(gameState?.score || 0)),
+                    level: Math.floor(level),
+                    maxCombo: Math.floor(metrics.maxCombo),
+                    comboCount: Math.floor(metrics.maxCombo),
+                    stageClears: Math.max(metrics.stageClears, Math.max(0, Math.floor(level - 1))),
+                    itemsCollected: Math.floor(metrics.itemsCollected),
+                    itemCounts: { ...metrics.itemCounts },
+                    duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
+                };
+            }
+
+            function postResult(force = false) {
+                if (metrics.sent && !force) return;
+                parent.postMessage({
+                    source: 'mgp-game',
+                    type: 'result',
+                    payload: buildSnapshot()
+                }, '*');
+                metrics.sent = true;
+            }
+
+            if (typeof selectCard === 'function') {
+                const originalSelectCard = selectCard;
+                selectCard = function (card) {
+                    if (card?.id) addItem(card.id, 1);
+                    return originalSelectCard.apply(this, arguments);
+                };
+            }
+
+            if (typeof levelCleared === 'function') {
+                const originalLevelCleared = levelCleared;
+                levelCleared = function () {
+                    metrics.stageClears += 1;
+                    return originalLevelCleared.apply(this, arguments);
+                };
+            }
+
+            if (typeof gameOver === 'function') {
+                const originalGameOver = gameOver;
+                gameOver = function () {
+                    const result = originalGameOver.apply(this, arguments);
+                    postResult();
+                    return result;
+                };
+            }
+
+            if (typeof resetGame === 'function') {
+                const originalResetGame = resetGame;
+                resetGame = function () {
+                    metrics.startedAt = Date.now();
+                    metrics.stageClears = 0;
+                    metrics.maxCombo = 0;
+                    metrics.itemsCollected = 0;
+                    metrics.itemCounts = {};
+                    metrics.sent = false;
+                    return originalResetGame.apply(this, arguments);
+                };
+            }
+
+            window.__mgpSnapshot = buildSnapshot;
+            window.addEventListener('beforeunload', () => postResult(true));
+        })();
+    </script>
 </body>
 </html>
