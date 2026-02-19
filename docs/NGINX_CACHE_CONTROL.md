@@ -33,3 +33,16 @@ After applying config:
    - `curl -I http://168.107.60.59/web-minigame-factory/src/platform/GameHub.js`
    - `curl -I http://168.107.60.59/web-minigame-factory/src/html/neon_biztycoon.html`
 
+## Project-side validation
+
+Use the built-in remote verification script:
+
+```bash
+npm run check:remote
+```
+
+Optional base URL:
+
+```bash
+node ./scripts/check-remote-deploy.mjs http://your-host/web-minigame-factory
+```

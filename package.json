@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npx serve . -l 3001",
     "start": "npx serve . -l 3001",
-    "sync:games": "node ./scripts/sync-game-registry.mjs"
+    "sync:games": "node ./scripts/sync-game-registry.mjs",
+    "check:remote": "node ./scripts/check-remote-deploy.mjs"
   },
   "keywords": ["minigame", "canvas", "html5", "mobile"],
   "author": "",
