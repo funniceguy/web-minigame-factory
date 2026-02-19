@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0a0a0f">
     <meta name="description" content="MINIGAME FACTORY - Play multiple mini games and share your scores.">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     
     <!-- Open Graph / SNS Share -->
     <meta property="og:type" content="website">
@@ -174,24 +177,57 @@
     
     <!-- Main Script -->
     <script type="module">
-        import { GameHub } from './src/platform/GameHub.js';
+        const createRuntimeToken = () => `${Date.now()}-${Math.floor(Math.random() * 1000000).toString(36)}`;
+        const buildRuntimeAssetUrl = (path, token) => {
+            const url = new URL(path, window.location.href);
+            url.searchParams.set('_v', token);
+            return url.href;
+        };
+
+        const loadGameHubClass = async () => {
+            const token = createRuntimeToken();
+            const moduleUrl = buildRuntimeAssetUrl('./src/platform/GameHub.js', token);
+            const module = await import(moduleUrl);
+            if (!module?.GameHub) {
+                throw new Error('GameHub export not found');
+            }
+            return module.GameHub;
+        };
         
         // Initialize app when DOM is ready
         document.addEventListener('DOMContentLoaded', async () => {
-            // Small delay for visual effect
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Initialize GameHub
-            const gameHub = new GameHub('app');
-            
-            // Check for shared game URL
-            const params = new URLSearchParams(window.location.search);
-            const sharedGame = params.get('game');
-            const challengeScore = params.get('challenge');
-            
-            if (sharedGame) {
-                // Show challenge modal if coming from shared link
-                showChallengeModal(sharedGame, challengeScore);
+            try {
+                const GameHub = await loadGameHubClass();
+
+                // Small delay for visual effect
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Initialize GameHub
+                const gameHub = new GameHub('app');
+                
+                // Check for shared game URL
+                const params = new URLSearchParams(window.location.search);
+                const sharedGame = params.get('game');
+                const challengeScore = params.get('challenge');
+                
+                if (sharedGame) {
+                    // Show challenge modal if coming from shared link
+                    showChallengeModal(sharedGame, challengeScore);
+                }
+            } catch (error) {
+                console.error('Failed to boot app:', error);
+                const app = document.getElementById('app');
+                if (app) {
+                    app.innerHTML = `
+                        <div style="display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;text-align:center;">
+                            <div class="glass-panel" style="padding:16px;max-width:560px;">
+                                <p class="neon-text-pink" style="margin:0 0 8px;">앱 로딩 실패</p>
+                                <p class="text-secondary" style="margin:0 0 8px;">브라우저 캐시 또는 네트워크 문제일 수 있습니다.</p>
+                                <code style="font-size:0.72rem;word-break:break-all;opacity:0.85;">${String(error?.message || error)}</code>
+                            </div>
+                        </div>
+                    `;
+                }
             }
             
             // Hide loading screen
