@@ -65,6 +65,7 @@ export class GameHub {
 
         this.eventsBound = false;
         this.discoveryStarted = false;
+        this.runtimeBasePath = this.resolveRuntimeBasePath();
         this.handleContainerClick = this.handleContainerClick.bind(this);
         this.handleWindowMessage = this.handleWindowMessage.bind(this);
 
@@ -195,6 +196,102 @@ export class GameHub {
         return this.getNumericOrFallback(config?.sourcePriority, fallback);
     }
 
+    resolveRuntimeBasePath() {
+        const pathname = window.location.pathname || '/';
+        if (!pathname || pathname === '/') return '/';
+
+        if (pathname.endsWith('/')) {
+            return pathname;
+        }
+
+        const lastSegment = pathname.split('/').pop() || '';
+        if (lastSegment.includes('.')) {
+            const lastSlash = pathname.lastIndexOf('/');
+            if (lastSlash < 0) return '/';
+            return `${pathname.slice(0, lastSlash + 1)}`;
+        }
+
+        return `${pathname}/`;
+    }
+
+    createCacheToken() {
+        return `${Date.now()}-${Math.floor(Math.random() * 1000000).toString(36)}`;
+    }
+
+    appendCacheBust(path, token = this.createCacheToken()) {
+        if (!path || typeof path !== 'string') return path;
+
+        const hashIndex = path.indexOf('#');
+        const basePath = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
+        const hash = hashIndex >= 0 ? path.slice(hashIndex) : '';
+        const separator = basePath.includes('?') ? '&' : '?';
+        return `${basePath}${separator}_v=${encodeURIComponent(token)}${hash}`;
+    }
+
+    resolveRuntimePath(rawPath) {
+        if (!rawPath || typeof rawPath !== 'string') return '';
+        const trimmed = rawPath.trim();
+        if (!trimmed) return '';
+
+        if (/^https?:\/\//i.test(trimmed)) {
+            return trimmed;
+        }
+
+        const cleaned = trimmed.startsWith('./') ? trimmed.slice(2) : trimmed;
+        if (cleaned.startsWith('/')) {
+            if (this.runtimeBasePath === '/' || !cleaned.startsWith('/src/')) {
+                return cleaned;
+            }
+            return `${this.runtimeBasePath.replace(/\/$/, '')}${cleaned}`;
+        }
+
+        return `${this.runtimeBasePath}${cleaned.replace(/^\/+/, '')}`;
+    }
+
+    buildRuntimeAssetUrl(path, options = {}) {
+        const { cacheBust = false, token } = options;
+        const resolvedPath = this.resolveRuntimePath(path);
+        if (!resolvedPath) return '';
+        if (!cacheBust) return resolvedPath;
+        return this.appendCacheBust(resolvedPath, token);
+    }
+
+    attachIframeLoadGuard(canvasWrapper, game, iframeSrc) {
+        const iframe = canvasWrapper.querySelector('#gameIframe');
+        if (!iframe) return;
+
+        let completed = false;
+        const timeoutId = window.setTimeout(() => {
+            if (completed || !canvasWrapper.contains(iframe)) return;
+
+            canvasWrapper.innerHTML = `
+                <div class="glass-panel" style="padding:16px;text-align:center;max-width:min(520px,90vw);">
+                    <p class="neon-text-pink" style="margin:0 0 8px;">게임 화면을 불러오지 못했습니다.</p>
+                    <p class="text-muted" style="margin:0 0 10px;">캐시된 파일 또는 경로 문제일 수 있습니다.</p>
+                    <code style="font-size:0.7rem;word-break:break-all;opacity:0.85;">${iframeSrc}</code>
+                </div>
+            `;
+            console.warn(`Game iframe load timeout: ${game?.id || 'unknown'}`, iframeSrc);
+        }, 10000);
+
+        const complete = () => {
+            completed = true;
+            window.clearTimeout(timeoutId);
+        };
+
+        iframe.addEventListener('load', complete, { once: true });
+        iframe.addEventListener('error', () => {
+            if (completed) return;
+            complete();
+            canvasWrapper.innerHTML = `
+                <div class="glass-panel" style="padding:16px;text-align:center;">
+                    <p class="neon-text-pink" style="margin:0 0 8px;">게임 로딩 실패</p>
+                    <code style="font-size:0.7rem;word-break:break-all;opacity:0.85;">${iframeSrc}</code>
+                </div>
+            `;
+        }, { once: true });
+    }
+
     async loadHtmlGameEntries() {
         const [fromRegistry, fromDirectory] = await Promise.all([
             this.loadHtmlGameEntriesFromRegistry(),
@@ -213,7 +310,10 @@ export class GameHub {
 
     async loadHtmlGameEntriesFromRegistry() {
         try {
-            const response = await fetch('/src/html/registry.json', { cache: 'no-store' });
+            const response = await fetch(
+                this.buildRuntimeAssetUrl('/src/html/registry.json', { cacheBust: true }),
+                { cache: 'no-store' }
+            );
             if (!response.ok) return [];
             const data = await response.json();
             if (Array.isArray(data)) return data;
@@ -226,7 +326,10 @@ export class GameHub {
 
     async loadHtmlGameEntriesFromDirectoryListing() {
         try {
-            const response = await fetch('/src/html/', { cache: 'no-store' });
+            const response = await fetch(
+                this.buildRuntimeAssetUrl('/src/html/', { cacheBust: true }),
+                { cache: 'no-store' }
+            );
             if (!response.ok) return [];
 
             const html = await response.text();
@@ -256,7 +359,10 @@ export class GameHub {
 
     async loadJsxGameEntriesFromRegistry() {
         try {
-            const response = await fetch('/src/jsx/registry.json', { cache: 'no-store' });
+            const response = await fetch(
+                this.buildRuntimeAssetUrl('/src/jsx/registry.json', { cacheBust: true }),
+                { cache: 'no-store' }
+            );
             if (!response.ok) return [];
             const data = await response.json();
             if (Array.isArray(data)) return data;
@@ -269,7 +375,10 @@ export class GameHub {
 
     async loadJsxGameEntriesFromDirectoryListing() {
         try {
-            const response = await fetch('/src/jsx/', { cache: 'no-store' });
+            const response = await fetch(
+                this.buildRuntimeAssetUrl('/src/jsx/', { cacheBust: true }),
+                { cache: 'no-store' }
+            );
             if (!response.ok) return [];
 
             const html = await response.text();
@@ -706,22 +815,28 @@ export class GameHub {
 
         const source = game.source || {};
         if (source.type === 'html') {
+            const cacheToken = this.createCacheToken();
+            const iframeSrc = this.buildRuntimeAssetUrl(source.path, { cacheBust: true, token: cacheToken });
             canvasWrapper.innerHTML = `
-                <iframe id="gameIframe" src="${source.path}" class="game-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
+                <iframe id="gameIframe" src="${iframeSrc}" class="game-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
             `;
+            this.attachIframeLoadGuard(canvasWrapper, game, iframeSrc);
             return;
         }
 
         if (source.type === 'jsx') {
+            const iframeSrc = this.buildJsxRunnerUrl(gameId, source);
             canvasWrapper.innerHTML = `
-                <iframe id="gameIframe" src="${this.buildJsxRunnerUrl(gameId, source)}" class="game-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
+                <iframe id="gameIframe" src="${iframeSrc}" class="game-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
             `;
+            this.attachIframeLoadGuard(canvasWrapper, game, iframeSrc);
             return;
         }
 
         if (source.type === 'module' && source.path) {
             try {
-                const module = await import(source.path);
+                const modulePath = this.buildRuntimeAssetUrl(source.path, { cacheBust: true });
+                const module = await import(modulePath);
                 const GameClass = module.default || module[Object.keys(module)[0]];
                 canvasWrapper.innerHTML = '<canvas id="gameCanvas"></canvas>';
                 this.gameInstance = new GameClass('gameCanvas', {
@@ -746,14 +861,25 @@ export class GameHub {
     }
 
     buildJsxRunnerUrl(gameId, source) {
-        const scriptPath = source.scriptPath || source.path || '';
-        const htmlPath = source.htmlPath || source.html || '';
+        const cacheToken = this.createCacheToken();
+        const scriptPath = this.buildRuntimeAssetUrl(source.scriptPath || source.path || '', {
+            cacheBust: true,
+            token: cacheToken
+        });
+        const htmlPath = this.buildRuntimeAssetUrl(source.htmlPath || source.html || '', {
+            cacheBust: true,
+            token: cacheToken
+        });
         const params = new URLSearchParams({
             gameId,
             script: scriptPath,
             html: htmlPath
         });
-        return `/src/platform/jsx-runner.html#${params.toString()}`;
+        const runnerPath = this.buildRuntimeAssetUrl('/src/platform/jsx-runner.html', {
+            cacheBust: true,
+            token: cacheToken
+        });
+        return `${runnerPath}#${params.toString()}`;
     }
 
     startGameSession(gameId, sourceType) {
