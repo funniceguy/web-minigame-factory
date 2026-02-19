@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=landscape">
-    <title>BizTycoon: Neon Roguelike</title>
+    <title>BizTycoon: Neon Roguelike - Enhanced</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -39,43 +39,44 @@
         
         /* 커스텀 슬라이더 */
         input[type=range] { -webkit-appearance: none; background: transparent; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #22d3ee; margin-top: -5px; cursor: pointer; box-shadow: 0 0 10px #22d3ee; border: 2px solid #fff; }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #334155; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22d3ee; margin-top: -6px; cursor: pointer; box-shadow: 0 0 10px #22d3ee; border: 2px solid #fff; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: #334155; border-radius: 3px; }
         
         /* 네온 글래스 패널 */
         .glass-panel {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
         }
         .info-box {
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(148, 163, 184, 0.2);
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
         }
         .glass-button {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(4px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.1s;
+            transition: all 0.15s ease;
         }
-        .glass-button:active { transform: scale(0.96); }
+        .glass-button:active { transform: scale(0.95); }
+        .glass-button:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); }
         
-        .text-shadow-neon { text-shadow: 0 0 8px rgba(34, 211, 238, 0.6); }
-        .text-shadow-red { text-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+        .text-shadow-neon { text-shadow: 0 0 10px rgba(34, 211, 238, 0.8); }
+        .text-shadow-red { text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
         
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 
         /* 애니메이션 */
-        @keyframes pulse-red-border { 0%, 100% { border-color: rgba(239, 68, 68, 0.2); } 50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); } }
-        .danger-pulse { animation: pulse-red-border 2s infinite; }
+        @keyframes pulse-red-border { 0%, 100% { border-color: rgba(239, 68, 68, 0.2); } 50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 25px rgba(239, 68, 68, 0.5); } }
+        .danger-pulse { animation: pulse-red-border 1.5s infinite; }
 
-        @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes slideInLeft { from { transform: translateX(-50px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .toast-enter { animation: slideInLeft 0.3s ease-out forwards; }
     </style>
 </head>
@@ -140,17 +141,15 @@
             return { id: Date.now() + Math.random(), name: `${role} ${Math.floor(Math.random()*100)}호`, role, tier, skill, wage, loyalty: 100, baseLoyalty };
         };
 
-        // 달러($) 포맷터
         const fmtMoney = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
         
         const getLoyaltyTrait = (loyalty) => loyalty >= 90 ? "충신" : loyalty >= 70 ? "애사심" : loyalty >= 40 ? "일반인" : loyalty >= 20 ? "기회주의" : "배신자";
         const calculateScoutCost = (emp, diff) => Math.floor(3000 * diff * (emp.skill / (10 * diff)) * 1.5 * (0.2 + (0.8 * (emp.loyalty / 100))));
-        const calculateSabotageCost = (emp, diff) => Math.floor(calculateScoutCost(emp, diff) * 0.1);
-        const calculateScoutChance = (emp) => Math.max(0, 0.5 * (1 - (emp.loyalty * emp.baseLoyalty) / 10000));
+        const calculateSabotageCost = (emp, diff) => Math.floor(3000 * diff * (emp.skill / (10 * diff)) * 0.1);
 
-        // --- Toasts (Left Top, above Stage Info) ---
         const Toast = ({ msgs }) => (
-            <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 pointer-events-none items-start">
+            // 알림 메시지가 무조건 모든 팝업 위에 표시되도록 z-[9999] 적용
+            <div className="absolute top-4 left-4 z-[9999] flex flex-col gap-2 pointer-events-none items-start">
                 {msgs.map(m => (
                     <div key={m.id} className="toast-enter glass-panel px-4 py-3 rounded-xl border-l-4 border-cyan-400 flex items-center gap-3 shadow-2xl backdrop-blur-md bg-slate-900/90 min-w-[200px]">
                         <Icon name={m.icon || "Info"} size={20} className="text-cyan-400 shrink-0"/>
@@ -160,7 +159,6 @@
             </div>
         );
 
-        // --- Main Component ---
         function App() {
             const [stageIdx, setStageIdx] = useState(0);
             const [gameState, setGameState] = useState("playing");
@@ -175,6 +173,18 @@
             const [rival, setRival] = useState({ price: 45, share: 60, cash: 200000, maxCash: 200000, emps: [] });
             
             const [day, setDay] = useState(1);
+            const [lastBuyDay, setLastBuyDay] = useState(0); // For market stabilization logic
+            
+            // HR & SPY Notification States
+            const [hasHrAlert, setHasHrAlert] = useState(false);
+            const [hasSpyAlert, setHasSpyAlert] = useState(false);
+
+            // Recruitment Cards System
+            const [hrStats, setHrStats] = useState({
+                normalCards: 1, headhuntCards: 1,
+                normalProgress: 0, headhuntProgress: 0
+            });
+            
             const stage = STAGES[stageIdx];
             
             const myQual = 20 * stage.difficulty + (emps.reduce((acc, e) => acc + (e.skill * (e.loyalty >= 50 ? 1 : e.loyalty/100)), 0) * 0.5);
@@ -188,12 +198,11 @@
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
             };
 
-            // Game Loop
             useEffect(() => {
                 if (gameState !== "playing") return;
                 const timer = setInterval(() => tick(), 1000 / speed);
                 return () => clearInterval(timer);
-            }, [gameState, speed, res, market, strat, rival, emps]);
+            }, [gameState, speed, res, market, strat, rival, emps, lastBuyDay]);
 
             useEffect(() => { if(day===1 && gameState==="playing") notify(`Stage ${stageIdx+1}: ${stage.name} 시작!`, "Rocket"); }, [stageIdx]);
 
@@ -203,8 +212,50 @@
                 let inputPrice = market.price;
                 let { cash: rCash, price: rPrice, share: rShare, emps: rEmps } = rival;
 
-                if (inputPrice > market.basePrice) inputPrice = Math.max(market.basePrice, inputPrice - 0.05);
-                
+                // --- 1. Market Logic Updates ---
+                // Market Stabilization: If no purchase for 7 days, price drops towards base
+                if (day - lastBuyDay > 7 && inputPrice > market.basePrice) {
+                    inputPrice = Math.max(market.basePrice, inputPrice * 0.98); 
+                }
+
+                // Rival Market Attack (Hoarding)
+                if (rCash > 50000 * diff && Math.random() < 0.005 * diff) {
+                     const hoardCost = 10000 * diff;
+                     rCash -= hoardCost;
+                     inputPrice = inputPrice * 1.15; // 15% surge
+                     setHasSpyAlert(true);
+                     notify(`${stage.rival} 사재기 포착! 원자재값 폭등`, "TrendingUp");
+                }
+                // -----------------------------
+
+                // --- 2. HR Cards Replenish Logic ---
+                // normal: +2 progress/tick (50 days to full), headhunt: +2 progress/tick (50 days to full)
+                setHrStats(prev => {
+                    let { normalCards, headhuntCards, normalProgress, headhuntProgress } = prev;
+                    let updated = false;
+
+                    if (normalCards < 3) {
+                        normalProgress += 2; // 2배 빠르게 수정됨
+                        if (normalProgress >= 100) {
+                            normalCards += 1;
+                            normalProgress = 0;
+                        }
+                        updated = true;
+                    }
+
+                    if (headhuntCards < 3) {
+                        headhuntProgress += 2; // Twice as fast
+                        if (headhuntProgress >= 100) {
+                            headhuntCards += 1;
+                            headhuntProgress = 0;
+                        }
+                        updated = true;
+                    }
+
+                    return updated ? { normalCards, headhuntCards, normalProgress, headhuntProgress } : prev;
+                });
+                // --------------------------------
+
                 if (Math.random() < 0.1) {
                     if (rShare < 50) rPrice = Math.max(10*diff, rPrice - 1);
                     else if (rShare > 70) rPrice += 0.5;
@@ -214,8 +265,22 @@
                 if (rEmps.length < rEmpCap && rCash > rRecruitCost*2 && Math.random() < 0.05) {
                     rCash -= rRecruitCost;
                     rEmps.push(generateEmployee(stage.roles, diff));
-                    notify(`${stage.rival}, 인재 영입!`, "Users");
+                    setHasSpyAlert(true);
                 }
+
+                // --- 3. Rival HR Attack Logic ---
+                // Rival targets high skill employees (S, A tiers)
+                if (stageIdx >= 1 && emps.length > 0 && Math.random() < 0.005 * diff) {
+                    const targetIdx = Math.floor(Math.random() * emps.length);
+                    const targetEmp = emps[targetIdx];
+                    if (['S', 'SS', 'A'].includes(targetEmp.tier)) {
+                         const loyaltyDmg = 15;
+                         setEmps(prev => prev.map((e, idx) => idx === targetIdx ? {...e, loyalty: Math.max(0, e.loyalty - loyaltyDmg)} : e));
+                         setHasHrAlert(true);
+                         notify(`${stage.rival}, ${targetEmp.name}에게 접근! 충성도 하락`, "UserMinus");
+                    }
+                }
+                // --------------------------------
 
                 let shareChange = (myValue - rivalValue) * 0.1 - (diff * 0.05);
                 let newRShare = Math.min(100, Math.max(0, rShare - shareChange));
@@ -223,7 +288,6 @@
                 if (newRShare <= 10) {
                     const dmg = 2000 * diff * speed;
                     rCash -= dmg;
-                    if (day % 10 === 0) notify(`시장 독점! ${stage.rival} 자금 급감`, "Flame");
                 } else {
                     const rSales = Math.floor((newRShare / 100 * 200) * market.trend);
                     rCash = Math.min(rival.maxCash, rCash + (rSales * rPrice) - (rSales * inputPrice));
@@ -257,23 +321,59 @@
                 else if (rCash <= 0) setGameState("stageClear");
             };
 
-            // Actions
             const buyInput = (amt) => {
                 const cost = amt * market.price;
                 if (res.cash >= cost) {
+                    // Price Surge Logic
+                    let priceMultiplier = 1.0;
+                    if (amt >= 500) priceMultiplier = 1.2; // 500+ -> 20% Surge
+                    else if (amt >= 100) priceMultiplier = 1.05; // 100+ -> 5% Surge
+                    else priceMultiplier = 1.01; // Small buy -> 1% Surge
+
                     setRes(p => ({ ...p, cash: p.cash - cost, input: p.input + amt }));
-                    setMarket(p => ({ ...p, price: p.price * (1 + (amt <= 10 ? 0.01 : 0.05)) }));
+                    setMarket(p => ({ ...p, price: p.price * priceMultiplier }));
+                    setLastBuyDay(day);
+
+                    if (amt >= 500) notify("대량 구매로 시세 급등!", "TrendingUp");
                 } else notify("자금 부족!", "AlertTriangle");
             };
+
             const recruit = (type) => {
+                // 채용 카드(인력 풀) 제한 로직
+                if (type === 'normal' && hrStats.normalCards <= 0) {
+                    notify("일반 채용 인력 풀이 소진되었습니다. 기다려주세요.", "AlertTriangle");
+                    return;
+                }
+                if (type === 'headhunter' && hrStats.headhuntCards <= 0) {
+                    notify("헤드헌팅 인력 풀이 소진되었습니다. 기다려주세요.", "AlertTriangle");
+                    return;
+                }
+
                 const cost = (type === 'normal' ? 2000 : 15000) * stage.difficulty;
                 if (res.cash < cost) { notify("자금 부족!", "AlertTriangle"); return; }
+                
+                // 자금 차감 및 카드 소모
                 setRes(p => ({ ...p, cash: p.cash - cost }));
-                const tier = type === 'headhunter' && Math.random() < 0.2 ? 'S' : null;
+                setHrStats(prev => ({
+                    ...prev,
+                    normalCards: type === 'normal' ? prev.normalCards - 1 : prev.normalCards,
+                    headhuntCards: type === 'headhunter' ? prev.headhuntCards - 1 : prev.headhuntCards
+                }));
+                
+                let tier = null;
+                if (type === 'headhunter') {
+                    const r = Math.random();
+                    if (r < 0.01) tier = 'SS';
+                    else if (r < 0.05) tier = 'S';
+                    else if (r < 0.25) tier = 'A';
+                    else tier = 'B';
+                }
+                
                 const newEmp = generateEmployee(stage.roles, stage.difficulty, tier);
                 setEmps(p => [...p, newEmp]);
                 notify(`${newEmp.name} 영입 성공!`, "UserPlus");
             };
+
             const fireEmployee = (id) => {
                 const emp = emps.find(e => e.id === id);
                 if (res.cash >= emp.wage*3) {
@@ -312,6 +412,7 @@
                     notify("스카웃 성공!", "UserCheck");
                 } else notify("스카웃 거절됨", "XCircle");
             };
+            
             const nextLevel = () => {
                 const nIdx = stageIdx + 1;
                 if (nIdx >= STAGES.length) { setGameState("gameClear"); return; }
@@ -320,64 +421,187 @@
                 const initCash = 30000 * nStage.difficulty;
                 setRes({ cash: initCash, input: 0, output: 0 });
                 setRival({ price: 50 * nStage.difficulty, share: 60, cash: initCash * 5, maxCash: initCash * 5, emps: [] });
-                setEmps([]); setStrat({ price: 45 * nStage.difficulty, prodRate: 0 });
+                setEmps([]); 
+                setStrat({ price: 45 * nStage.difficulty, prodRate: 0 });
                 setMarket({ price: 10 * nStage.difficulty, basePrice: 10 * nStage.difficulty, trend: 1.0 });
-                setGameState("playing"); setDay(1);
+                setGameState("playing"); 
+                setDay(1);
+                setLastBuyDay(1);
+                setSpeed(1);
+                setHasHrAlert(false);
+                setHasSpyAlert(false);
+                setHrStats({ normalCards: 1, headhuntCards: 1, normalProgress: 0, headhuntProgress: 0 });
             };
+
             const restartGame = () => {
-                setStageIdx(0); setGameState("playing"); setSpeed(1);
+                setStageIdx(0); 
+                setGameState("playing"); 
+                setSpeed(1); 
                 setRes({ cash: 30000, input: 0, output: 0 });
                 setMarket({ price: 10, basePrice: 10, trend: 1.0 });
                 setStrat({ price: 40, prodRate: 0 });
                 setEmps([]);
                 setRival({ price: 45, share: 60, cash: 200000, maxCash: 200000, emps: [] });
                 setDay(1);
+                setLastBuyDay(1);
+                setHasHrAlert(false);
+                setHasSpyAlert(false);
+                setHrStats({ normalCards: 1, headhuntCards: 1, normalProgress: 0, headhuntProgress: 0 });
             };
 
-            const flashClass = res.cash < 5000 ? 'danger-pulse' : '';
+            const calculateScoutChance = (emp) => Math.max(0, 0.5 * (1 - (emp.loyalty * emp.baseLoyalty) / 10000));
+            const totalDailyWage = emps.reduce((acc, e) => acc + e.wage, 0);
 
-            // --- Simplified Modals for compact code ---
+            // --- Enhanced HR Modal (Optimized Size) ---
             const renderHRModal = () => (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
-                    <div className="glass-panel w-full max-w-lg rounded-2xl p-4 max-h-[80vh] flex flex-col" onClick={e=>e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-white flex gap-2"><Icon name="Users"/> 인사 관리</h2><button onClick={()=>setModal(null)}><Icon name="XCircle" className="text-slate-400"/></button></div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                             <div className="grid grid-cols-2 gap-2 mb-4">
-                                <button onClick={()=>recruit('normal')} className="glass-button p-2 rounded text-xs text-white">일반 채용<br/>{fmtMoney(2000*stage.difficulty)}</button>
-                                <button onClick={()=>recruit('headhunter')} className="glass-button p-2 rounded text-xs text-yellow-300 border-yellow-500/30">헤드헌팅<br/>{fmtMoney(15000*stage.difficulty)}</button>
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-4" onClick={() => setModal(null)}>
+                    <div className="glass-panel w-full max-w-2xl rounded-2xl p-5 md:p-6 max-h-[80vh] flex flex-col border border-indigo-500/30 shadow-2xl" onClick={e=>e.stopPropagation()}>
+                        
+                        {/* Compact Header */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3 border-b border-slate-700/50 pb-4">
+                            <div>
+                                <h2 className="text-2xl font-black text-white flex gap-2 items-center font-orbitron">
+                                    <Icon name="Users" size={24} className="text-indigo-400"/> 인사 관리
+                                </h2>
                             </div>
-                            {emps.length===0 && <p className="text-center text-slate-500 text-xs">직원 없음</p>}
-                            {emps.map(e => <div key={e.id} className="bg-slate-800/50 p-2 rounded flex justify-between items-center text-xs">
-                                <div><span className={`px-1 rounded border mr-1 ${EMPLOYEE_TIERS[e.tier].color}`}>{EMPLOYEE_TIERS[e.tier].name}</span>{e.name} <span className="text-pink-400 ml-1">♥{e.loyalty}</span></div>
-                                <div className="flex gap-1"><button onClick={()=>giveBonus(e.id)} className="bg-pink-900/30 text-pink-200 px-1 rounded">보너스</button><button onClick={()=>fireEmployee(e.id)} className="border border-slate-600 px-1 rounded">해고</button></div>
-                            </div>)}
+                            <div className="flex gap-2">
+                                <div className="info-box px-3 py-1.5 rounded-xl text-right">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">보유 자산</p>
+                                    <p className="text-sm font-bold text-emerald-400 font-orbitron">{fmtMoney(res.cash)}</p>
+                                </div>
+                                <div className="info-box px-3 py-1.5 rounded-xl text-right">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">일일 총 급여</p>
+                                    <p className="text-sm font-bold text-red-400 font-orbitron">-{fmtMoney(totalDailyWage)}</p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            );
 
-            const renderSpyModal = () => (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setModal(null)}>
-                    <div className="glass-panel w-full max-w-lg rounded-2xl p-4 max-h-[80vh] flex flex-col border-red-500/30" onClick={e=>e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-red-100 flex gap-2"><Icon name="Eye"/> 경쟁사 첩보</h2><button onClick={()=>setModal(null)}><Icon name="XCircle" className="text-slate-400"/></button></div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                            {rival.emps.length===0 ? <p className="text-center text-slate-500 py-4 text-xs">직원 없음</p> : rival.emps.map(e => (
-                                <div key={e.id} className="bg-black/40 p-2 rounded flex justify-between items-center text-xs border border-red-900/30">
-                                    <div><span className={`${EMPLOYEE_TIERS[e.tier].color} font-bold mr-1`}>{EMPLOYEE_TIERS[e.tier].name}</span>{e.name} <span className="text-slate-400">| {getLoyaltyTrait(e.baseLoyalty)}</span></div>
-                                    <div className="flex gap-1">
-                                        <button onClick={()=>sabotage(e.id)} className="bg-red-900/50 text-red-200 px-2 py-1 rounded">이간질 <span className="block text-[9px]">-{fmtMoney(calculateSabotageCost(e, stage.difficulty))}</span></button>
-                                        <button onClick={()=>scout(e.id)} className="bg-indigo-900/50 text-indigo-200 px-2 py-1 rounded">스카웃 <span className="block text-[9px]">-{fmtMoney(calculateScoutCost(e, stage.difficulty))}</span></button>
+                        {/* Recruitment Row (Cards system applied) */}
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                            <button onClick={()=>recruit('normal')} className={`glass-button p-3 rounded-xl flex flex-col items-center group relative overflow-hidden ${hrStats.normalCards <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}>
+                                {/* 충전 프로그레스 바 */}
+                                {hrStats.normalCards < 3 && <div className="absolute bottom-0 left-0 h-1 bg-cyan-500/60" style={{ width: `${hrStats.normalProgress}%`, transition: 'width 0.3s' }}></div>}
+                                
+                                <span className="text-[10px] text-slate-400 font-bold group-hover:text-white relative z-10">일반 채용 (C-S)</span>
+                                <span className="text-base font-black text-white relative z-10">{fmtMoney(2000*stage.difficulty)}</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-slate-900/60 rounded-full mt-1 font-bold border border-slate-700 text-slate-300 relative z-10">
+                                    인력 풀: <span className={hrStats.normalCards > 0 ? "text-cyan-400" : "text-red-400"}>{hrStats.normalCards}</span> / 3
+                                </span>
+                            </button>
+                            <button onClick={()=>recruit('headhunter')} className={`glass-button p-3 rounded-xl border-yellow-500/20 flex flex-col items-center group relative overflow-hidden ${hrStats.headhuntCards <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}>
+                                {/* 헤드헌팅 충전 프로그레스 바 (2배 빠름) */}
+                                {hrStats.headhuntCards < 3 && <div className="absolute bottom-0 left-0 h-1 bg-yellow-500/60" style={{ width: `${hrStats.headhuntProgress}%`, transition: 'width 0.3s' }}></div>}
+                                
+                                <span className="text-[10px] text-yellow-600 font-bold group-hover:text-yellow-400 relative z-10">헤드헌팅 (B-Legend)</span>
+                                <span className="text-base font-black text-yellow-500 relative z-10">{fmtMoney(15000*stage.difficulty)}</span>
+                                <span className="text-[10px] px-2 py-0.5 bg-slate-900/60 rounded-full mt-1 font-bold border border-yellow-900/50 text-slate-300 relative z-10">
+                                    인력 풀: <span className={hrStats.headhuntCards > 0 ? "text-yellow-400" : "text-red-400"}>{hrStats.headhuntCards}</span> / 3
+                                </span>
+                            </button>
+                        </div>
+
+                        {/* Employee List */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                            {emps.length===0 ? (
+                                <div className="h-32 flex flex-col items-center justify-center text-slate-600 border border-dashed border-slate-800 rounded-2xl">
+                                    <p className="text-sm font-bold">직원이 없습니다.</p>
+                                </div>
+                            ) : emps.map(e => (
+                                <div key={e.id} className="bg-slate-800/30 p-3 rounded-xl flex flex-col md:flex-row justify-between items-center gap-3 border border-slate-700/50 hover:bg-slate-800/50 transition-colors">
+                                    <div className="flex items-center gap-3 w-full md:w-auto">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm border ${EMPLOYEE_TIERS[e.tier].bg} ${EMPLOYEE_TIERS[e.tier].color} border-current`}>
+                                            {e.tier}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-white">{e.name}</span>
+                                                <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 text-slate-300 rounded font-bold">{e.role}</span>
+                                            </div>
+                                            <div className="flex gap-3 text-[11px] mt-1">
+                                                <span className="text-yellow-400 font-bold flex items-center gap-1"><Icon name="Zap" size={12}/> {e.skill.toLocaleString()}</span>
+                                                <span className="text-red-400 font-bold flex items-center gap-1"><Icon name="DollarSign" size={12}/> {fmtMoney(e.wage)}</span>
+                                                <span className="text-pink-400 font-bold flex items-center gap-1"><Icon name="Heart" size={12}/> {e.loyalty}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        <button onClick={()=>giveBonus(e.id)} className="flex-1 md:flex-none bg-pink-900/30 text-pink-300 px-3 py-1.5 rounded-lg border border-pink-500/20 hover:bg-pink-600 hover:text-white font-bold transition-all text-xs">
+                                            보너스 <span className="text-[9px] opacity-70">-{fmtMoney(calculateSabotageCost(e, stage.difficulty))}</span>
+                                        </button>
+                                        <button onClick={()=>fireEmployee(e.id)} className="flex-1 md:flex-none border border-red-500/20 text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-900/30 font-bold transition-all text-xs">
+                                            해고
+                                        </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                        <button onClick={()=>setModal(null)} className="mt-4 w-full py-2 text-slate-500 text-sm font-bold hover:text-white transition-colors">닫기</button>
                     </div>
                 </div>
             );
 
+            // --- Enhanced Spy Modal (Optimized Size) ---
+            const renderSpyModal = () => (
+                <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[200] p-4" onClick={() => setModal(null)}>
+                    <div className="glass-panel w-full max-w-2xl rounded-2xl p-5 md:p-6 max-h-[80vh] flex flex-col border border-red-500/30 shadow-2xl" onClick={e=>e.stopPropagation()}>
+                        
+                        <div className="flex justify-between items-center mb-4 pb-4 border-b border-red-900/30">
+                            <div>
+                                <h2 className="text-2xl font-black text-red-100 flex gap-2 items-center font-orbitron">
+                                    <Icon name="Eye" size={24} className="text-red-500"/> 첩보국
+                                </h2>
+                                <p className="text-red-400/50 text-[10px] font-bold uppercase tracking-widest">{stage.rival} 분석 중</p>
+                            </div>
+                             <div className="info-box px-3 py-1.5 rounded-xl text-right text-xs">
+                                <p className="text-[9px] text-red-400/40 font-bold uppercase">가용 자금</p>
+                                <p className="font-bold text-white">{fmtMoney(res.cash)}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                            {rival.emps.length===0 ? (
+                                <div className="h-32 flex flex-col items-center justify-center text-red-900/30 border border-dashed border-red-900/20 rounded-2xl">
+                                    <p className="text-sm font-bold">감지된 핵심 인력 없음</p>
+                                </div>
+                            ) : rival.emps.map(e => (
+                                <div key={e.id} className="bg-black/40 p-3 rounded-xl flex flex-col md:flex-row justify-between items-center gap-3 border border-red-900/20 hover:bg-red-950/20 transition-all group">
+                                    <div className="flex items-center gap-3 w-full md:w-auto">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm border ${EMPLOYEE_TIERS[e.tier].color} border-current opacity-60`}>
+                                            {e.tier}
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-red-50">{e.name}</span>
+                                                <span className="text-[9px] font-bold text-red-400/70 border border-red-400/20 px-1 py-0.5 rounded">{getLoyaltyTrait(e.baseLoyalty)}</span>
+                                            </div>
+                                            <div className="flex gap-3 text-[11px] font-bold mt-1">
+                                                <span className="text-yellow-500/60 italic">능력: {e.skill.toLocaleString()}</span>
+                                                <span className="text-slate-500">포섭확률: {(calculateScoutChance(e)*100).toFixed(0)}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        <button onClick={()=>sabotage(e.id)} className="flex-1 md:flex-none bg-red-900/30 text-red-200 px-3 py-1.5 rounded-lg border border-red-700/30 hover:bg-red-600 hover:text-white font-bold transition-all text-xs">
+                                            방해 <span className="text-[9px] block opacity-60">-{fmtMoney(calculateSabotageCost(e, stage.difficulty))}</span>
+                                        </button>
+                                        <button onClick={()=>scout(e.id)} className="flex-1 md:flex-none bg-indigo-900/30 text-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-700/30 hover:bg-indigo-600 hover:text-white font-bold transition-all text-xs">
+                                            스카웃 <span className="text-[9px] block opacity-60">-{fmtMoney(calculateScoutCost(e, stage.difficulty))}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={()=>setModal(null)} className="mt-4 w-full py-2 text-red-950 text-sm font-bold hover:text-red-500 transition-colors">취소</button>
+                    </div>
+                </div>
+            );
+
+            const flashClass = res.cash < 5000 ? 'danger-pulse' : '';
+
             return (
                 <div className={`w-full max-w-[1280px] aspect-[16/10] max-h-screen bg-[#050505] shadow-2xl relative overflow-hidden flex flex-col p-4 md:p-8 transition-all duration-300 border border-slate-800 rounded-3xl ${flashClass}`}>
                     <Toast msgs={toasts} />
+                    
                     {modal === 'HR' && renderHRModal()}
                     {modal === 'SPY' && renderSpyModal()}
 
@@ -403,12 +627,11 @@
                         </div>
                     </div>
 
-                    {/* Main Content Grid (No Scroll, Filled) */}
+                    {/* Main Content Grid */}
                     <div className="flex-1 grid grid-cols-3 gap-6 min-h-0 relative z-10 pb-2">
                         
                         {/* 1. Purchase Panel */}
                         <div className="glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-cyan-500 relative">
-                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="ArrowRight" size={80} className="text-cyan-500 rotate-45"/></div>
                             <h2 className="text-lg font-bold text-cyan-400 mb-6 flex items-center gap-2 font-orbitron z-10"><Icon name="ArrowRight" className="rotate-45" size={20}/> {stage.input} 구매</h2>
                             <div className="flex-1 flex flex-col gap-4 justify-start z-10">
                                 <div className="info-box p-4 rounded-xl flex justify-between items-center">
@@ -421,7 +644,7 @@
                                 </div>
                                 <div className="flex-1 content-end">
                                     <div className="grid grid-cols-3 gap-2 mt-auto">
-                                        {[10, 100, 500].map(amt => <button key={amt} onClick={() => buyInput(amt)} className="glass-button text-cyan-300 py-3 rounded-xl text-sm font-bold font-orbitron hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">+{amt}</button>)}
+                                        {[10, 100, 500].map(amt => <button key={amt} onClick={() => buyInput(amt)} className="glass-button text-cyan-300 py-3 rounded-xl text-sm font-bold font-orbitron">+{amt}</button>)}
                                     </div>
                                 </div>
                             </div>
@@ -429,11 +652,11 @@
 
                         {/* 2. Production Panel */}
                         <div className="glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-orange-500 relative">
-                             <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="Hammer" size={80} className="text-orange-500"/></div>
                             <h2 className="text-lg font-bold text-orange-400 mb-6 flex items-center gap-2 font-orbitron z-10"><Icon name="Hammer" size={20}/> 생산 관리</h2>
                             <div className="flex-1 flex flex-col gap-4 justify-between z-10">
-                                <button onClick={() => setModal('HR')} className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white py-3 rounded-xl shadow-lg shadow-orange-900/30 flex items-center justify-center gap-2 font-bold hover:scale-[1.02] transition-transform text-sm border border-orange-400/30">
-                                    <Icon name="Users" size={16} /> 인사 관리 <span className="bg-black/20 text-orange-100 text-xs px-2 py-0.5 rounded-full">{emps.length}명</span>
+                                <button onClick={() => { setModal('HR'); setHasHrAlert(false); }} className="relative w-full bg-gradient-to-r from-orange-600 to-red-600 text-white py-4 rounded-xl shadow-lg shadow-orange-900/30 flex items-center justify-center gap-3 font-black hover:scale-[1.02] transition-transform text-base border border-orange-400/30">
+                                    <Icon name="Users" size={20} /> 인사 관리 센터 <span className="bg-black/20 text-orange-100 text-xs px-2 py-0.5 rounded-full">{emps.length}</span>
+                                    {hasHrAlert && <span className="absolute -top-2 -right-2 flex h-5 w-5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-5 w-5 bg-red-600 border border-white text-xs items-center justify-center font-bold text-white">!</span></span>}
                                 </button>
                                 <div className="info-box p-3 rounded-xl">
                                     <div className="flex justify-between mb-2"><span className="text-xs text-slate-400 font-bold">상품 품질</span><span className="text-lg font-bold text-yellow-400 font-mono flex items-center gap-1"><Icon name="Sparkles" size={14}/> {Math.floor(myQual).toLocaleString()}</span></div>
@@ -451,12 +674,17 @@
 
                         {/* 3. Sales Panel */}
                         <div className={`glass-panel rounded-2xl p-5 flex flex-col h-full overflow-hidden border-t-4 border-t-red-500 relative ${100-rival.share <= 10 ? 'danger-pulse' : ''}`}>
-                             <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="Sword" size={80} className="text-red-500"/></div>
-                            <div className="flex justify-between items-center mb-6 z-10"><h2 className="text-lg font-bold text-red-400 flex items-center gap-2 font-orbitron"><Icon name="Sword" size={20}/> 경영 전쟁</h2><button onClick={() => setModal('SPY')} className="text-xs bg-red-900/30 text-red-300 px-3 py-1 rounded-full border border-red-500/30 hover:bg-red-900/60 hover:text-white transition-colors font-bold tracking-wider">SPY MODE</button></div>
+                            <div className="flex justify-between items-center mb-6 z-10">
+                                <h2 className="text-lg font-bold text-red-400 flex items-center gap-2 font-orbitron"><Icon name="Sword" size={20}/> 경영 전쟁</h2>
+                                <button onClick={() => { setModal('SPY'); setHasSpyAlert(false); }} className="relative text-xs bg-red-900/30 text-red-300 px-3 py-1 rounded-full border border-red-500/30 hover:bg-red-900/60 hover:text-white transition-colors font-bold tracking-wider">
+                                    SPY MODE
+                                    {hasSpyAlert && <span className="absolute -top-1 -right-1 flex h-4 w-4"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-4 w-4 bg-red-600 text-[10px] items-center justify-center font-bold text-white">!</span></span>}
+                                </button>
+                            </div>
                             <div className="flex-1 flex flex-col gap-4 justify-between z-10">
                                 <div>
                                     <div className="flex justify-between text-xs mb-2 font-exo"><span className="text-red-400 font-bold">VS {stage.rival} 자금력</span><span className="text-slate-400 font-mono">{fmtMoney(rival.cash)}</span></div>
-                                    <div className="w-full bg-slate-900/50 h-2 rounded-full overflow-hidden border border-slate-700"><div className="bg-red-500 h-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{ width: `${Math.max(0, (rival.cash / rival.maxCash) * 100)}%` }} /></div>
+                                    <div className="w-full bg-slate-900/50 h-2 rounded-full overflow-hidden border border-slate-700"><div className="bg-red-500 h-full" style={{ width: `${Math.max(0, (rival.cash / rival.maxCash) * 100)}%` }} /></div>
                                 </div>
                                 <div className="bg-slate-900 rounded-xl h-12 flex overflow-hidden border border-slate-600 relative shadow-inner">
                                     <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 h-full flex items-center justify-start pl-4 text-xs font-bold text-white whitespace-nowrap font-orbitron" style={{ width: `${100 - rival.share}%` }}>ME {Math.floor(100 - rival.share)}%</div>
@@ -466,25 +694,25 @@
                                     <div className="bg-emerald-900/20 p-3 rounded-xl border border-emerald-500/30">
                                         <p className="text-xs text-emerald-400 mb-2 font-bold">나의 가격 <span className="float-right font-mono text-white text-base">{fmtMoney(strat.price)}</span></p>
                                         <input type="range" min="10" max="300" value={strat.price} onChange={(e) => setStrat({...strat, price: Number(e.target.value)})} className="w-full h-1.5 bg-emerald-900/50 rounded appearance-none cursor-pointer accent-emerald-400"/>
-                                        <div className="text-right text-[10px] text-emerald-200/70 font-bold font-mono mt-1">가성비 {((myValue).toFixed(0))}</div>
+                                        <div className="text-right text-[10px] text-emerald-300/80 font-bold mt-2">경쟁력: <span className="font-mono text-emerald-200">{myValue.toFixed(0)}</span></div>
                                     </div>
                                     <div className="bg-red-900/20 p-3 rounded-xl border border-red-500/30">
                                         <p className="text-xs text-red-400 mb-2 font-bold">경쟁사 <span className="float-right font-mono text-slate-300 text-base">{fmtMoney(Math.floor(rival.price))}</span></p>
                                         <div className="w-full h-1.5 bg-red-900/30 rounded mt-3"></div>
-                                        <div className="text-right text-[10px] text-red-200/70 font-bold font-mono mt-1">가성비 {((rivalValue).toFixed(0))}</div>
+                                        <div className="text-right text-[10px] text-red-300/80 font-bold mt-2">경쟁력: <span className="font-mono text-red-200">{rivalValue.toFixed(0)}</span></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Overlays (Game Over / Clear) */}
+                    {/* Overlays */}
                     {(gameState === "gameClear" || gameState === "stageClear" || gameState === "bankrupt") && (
-                        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[100]">
-                            <div className="glass-panel p-8 rounded-3xl border-2 text-center max-w-md animate-bounce-in shadow-[0_0_80px_rgba(0,0,0,0.8)] flex flex-col items-center gap-6">
-                                {gameState === "bankrupt" && <><Icon name="AlertTriangle" size={64} className="text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]"/><div className="space-y-2"><h2 className="text-3xl font-bold text-white font-orbitron">BANKRUPTCY</h2><p className="text-slate-400">자금이 바닥났습니다.</p></div><button onClick={restartGame} className="bg-red-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-red-500 shadow-lg w-full transition-transform hover:scale-105">다시 도전</button></>}
-                                {gameState === "stageClear" && <><Icon name="Crown" size={64} className="text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.5)]"/><div className="space-y-2"><h2 className="text-3xl font-bold text-white font-orbitron">STAGE CLEAR!</h2><p className="text-slate-400">목표 자금 달성!</p></div><button onClick={nextLevel} className="bg-emerald-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-emerald-500 shadow-lg w-full flex items-center justify-center gap-2 transition-transform hover:scale-105">다음 단계 <Icon name="ArrowRight" size={20}/></button></>}
-                                {gameState === "gameClear" && <><Icon name="Crown" size={80} className="text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]"/><div className="space-y-2"><h2 className="text-4xl font-bold text-white font-orbitron tracking-tighter">LEGENDARY</h2><p className="text-slate-400">전설의 경영자가 되셨습니다.</p></div><button onClick={restartGame} className="bg-indigo-600 px-8 py-3 rounded-xl font-bold text-white hover:bg-indigo-500 shadow-lg w-full transition-transform hover:scale-105">새 게임 시작</button></>}
+                        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[300]">
+                            <div className="glass-panel p-8 rounded-3xl border-2 text-center max-w-md shadow-[0_0_80px_rgba(0,0,0,0.8)] flex flex-col items-center gap-6">
+                                {gameState === "bankrupt" && <><Icon name="AlertTriangle" size={64} className="text-red-500"/><h2 className="text-3xl font-bold text-white font-orbitron">BANKRUPTCY</h2><button onClick={restartGame} className="bg-red-600 px-8 py-3 rounded-xl font-bold text-white w-full">다시 도전</button></>}
+                                {gameState === "stageClear" && <><Icon name="Crown" size={64} className="text-yellow-400"/><h2 className="text-3xl font-bold text-white font-orbitron">STAGE CLEAR!</h2><button onClick={nextLevel} className="bg-emerald-600 px-8 py-3 rounded-xl font-bold text-white w-full">다음 단계</button></>}
+                                {gameState === "gameClear" && <><Icon name="Crown" size={80} className="text-yellow-400"/><h2 className="text-4xl font-bold text-white font-orbitron">LEGENDARY</h2><button onClick={restartGame} className="bg-indigo-600 px-8 py-3 rounded-xl font-bold text-white w-full">새 게임</button></>}
                             </div>
                         </div>
                     )}
