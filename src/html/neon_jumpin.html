@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Jump In</title>
+    <!-- Google Fonts: 스타일리쉬한 네온/사이버펑크 느낌의 폰트 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background-color: #0f172a;
+            overflow: hidden;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; font-family: 'Rajdhani', sans-serif;
+        }
+        #game-container { box-shadow: 0 0 50px rgba(0, 255, 255, 0.2); }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <script>
+        // 글로벌 변수 설정
+        let q = window.innerWidth > 480 ? 480 : window.innerWidth;
+        let _ = window.innerHeight;
+
+        // --- Web Audio API를 활용한 효과음(SFX) 생성기 ---
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type, freqStart, freqEnd, duration, vol) {
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freqStart, audioCtx.currentTime);
+            if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, audioCtx.currentTime + duration);
+            
+            // 부드러운 볼륨 감쇠
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const SFX = {
+            jump: () => playSound('square', 300, 600, 0.15, 0.03),
+            bounce: () => playSound('sine', 400, 800, 0.2, 0.03),
+            pinball: () => playSound('square', 600, 1200, 0.4, 0.05),
+            item: () => { 
+                playSound('square', 800, 1000, 0.1, 0.03); 
+                setTimeout(()=>playSound('square', 1200, 1600, 0.2, 0.03), 100); 
+            },
+            dash: () => playSound('sawtooth', 200, 100, 0.8, 0.05),
+            death: () => { 
+                playSound('sawtooth', 200, 50, 0.5, 0.08); 
+                setTimeout(()=>playSound('square', 100, 20, 0.8, 0.08), 300); 
+            }
+        };
+
+        // 1. BootScene: 에셋 로딩 및 텍스처 실시간 생성
+        class BootScene extends Phaser.Scene {
+            constructor() { super('BootScene'); }
+            preload() {
+                let g = this.make.graphics({ x: 0, y: 0, add: false });
+                
+                // 플레이어
+                g.fillStyle(0x00ffff, 1);
+                g.fillRoundedRect(0, 0, 32, 32, 8);
+                g.generateTexture('player', 32, 32); g.clear();
+
+                // 일반 플랫폼 (검은 테두리 + 회색 반투명)
+                g.lineStyle(2, 0x000000, 1);
+                g.fillStyle(0x808080, 0.5);
+                g.fillRoundedRect(1, 1, 98, 18, 9);
+                g.strokeRoundedRect(1, 1, 98, 18, 9);
+                g.generateTexture('platform', 100, 20); g.clear();
+
+                // 핀볼 바운서 (주황색 원)
+                g.fillStyle(0xff8800, 1);
+                g.fillCircle(25, 25, 25);
+                g.generateTexture('pinball', 50, 50); g.clear();
+
+                // 몬스터 (빨간 가시 모양)
+                g.fillStyle(0xff0000, 1);
+                g.beginPath();
+                g.moveTo(25, 0); g.lineTo(50, 50); g.lineTo(0, 50); g.closePath();
+                g.fillPath();
+                g.generateTexture('monster', 50, 50); g.clear();
+
+                // 시간 아이템 (녹색 십자가)
+                g.fillStyle(0x00ff00, 1);
+                g.fillRect(10, 0, 10, 30); g.fillRect(0, 10, 30, 10);
+                g.generateTexture('timeItem', 30, 30); g.clear();
+
+                // 대쉬 하강 아이템 (노란색 아래 화살표)
+                g.fillStyle(0xffff00, 1);
+                g.beginPath();
+                g.moveTo(0, 0); g.lineTo(30, 0); g.lineTo(15, 30); g.closePath();
+                g.fillPath();
+                g.generateTexture('dashItem', 30, 30); g.clear();
+            }
+            create() { this.scene.start('MenuScene'); }
+        }
+
+        // 2. MenuScene: 메인 메뉴 UI
+        class MenuScene extends Phaser.Scene {
+            constructor() { super('MenuScene'); }
+            create() {
+                const bg = this.add.graphics();
+                bg.fillGradientStyle(0x0f172a, 0x0f172a, 0x1e293b, 0x1e293b, 1);
+                bg.fillRect(0, 0, q, _);
+
+                this.add.text(q / 2, _ * 0.3, 'NEON\nJUMP IN', {
+                    fontFamily: 'Orbitron', fontWeight: '900', fontSize: '56px', color: '#00ffff', align: 'center'
+                }).setOrigin(0.5).setShadow(0, 0, '#00ffff', 20, true, true);
+
+                const startBtn = this.add.container(q / 2, _ * 0.6);
+                const btnBg = this.add.graphics();
+                // FALL DOWN 버튼을 검은색 계열로 변경
+                btnBg.fillStyle(0x000000, 0.6); 
+                // 테두리를 하늘색으로 변경
+                btnBg.lineStyle(3, 0x00ffff, 1);
+                btnBg.fillRoundedRect(-100, -35, 200, 70, 35);
+                btnBg.strokeRoundedRect(-100, -35, 200, 70, 35);
+                
+                const btnText = this.add.text(0, 0, 'FALL DOWN!', {
+                    fontFamily: 'Orbitron', fontWeight: '700', fontSize: '24px', color: '#ffffff'
+                }).setOrigin(0.5);
+
+                startBtn.add([btnBg, btnText]);
+                startBtn.setSize(200, 70).setInteractive({ useHandCursor: true });
+                startBtn.on('pointerdown', () => { 
+                    initAudio(); // 브라우저 정책 대응 (터치 시 오디오 활성화)
+                    this.scene.start('PlayScene'); 
+                });
+
+                this.tweens.add({ targets: startBtn, scale: 1.05, duration: 800, yoyo: true, repeat: -1 });
+            }
+        }
+
+        // 3. PlayScene: 핵심 게임 로직 (아래로 하강)
+        class PlayScene extends Phaser.Scene {
+            constructor() { super('PlayScene'); }
+
+            init() {
+                this.score = 0;
+                this.timeLeft = 45;
+                this.isGameOver = false;
+                this.isDashing = false;
+                
+                this.nextY = 200; 
+                this.floorSpacing = 150; 
+            }
+
+            create() {
+                this.add.graphics().fillGradientStyle(0x0f172a, 0x0f172a, 0x1e1e2e, 0x1e1e2e, 1).fillRect(0, 0, q, _);
+
+                // 상시 파티클 (하강 궤적)
+                this.particles = this.add.particles(0, 0, 'player', {
+                    scale: { start: 0.4, end: 0 }, alpha: { start: 0.6, end: 0 },
+                    speed: 50, lifespan: 400, blendMode: 'ADD', emitting: false
+                });
+
+                this.platforms = this.physics.add.group({ immovable: true, allowGravity: false });
+                this.pinballs = this.physics.add.staticGroup();
+                this.monsters = this.physics.add.staticGroup();
+                this.items = this.physics.add.staticGroup();
+
+                this.player = this.physics.add.sprite(q / 2, 0, 'player');
+                this.player.setBounce(0);
+                this.player.setCollideWorldBounds(false);
+                this.player.body.setGravityY(800);
+
+                this.cameras.main.startFollow(this.player, true, 0, 1, 0, -_ * 0.3);
+
+                this.physics.add.collider(this.player, this.platforms, this.hitPlatform, this.checkDashCollider, this);
+                this.physics.add.collider(this.player, this.pinballs, this.hitPinball, this.checkDashCollider, this);
+                this.physics.add.overlap(this.player, this.monsters, this.hitMonster, this.checkDashCollider, this);
+                this.physics.add.overlap(this.player, this.items, this.collectItem, null, this);
+
+                this.input.on('pointerdown', (pointer) => {
+                    if (this.isGameOver || this.isDashing) return;
+                    initAudio();
+                    SFX.jump(); // 점프 사운드
+                    let jumpX = pointer.x < q / 2 ? -350 : 350;
+                    this.player.setVelocity(jumpX, -300);
+                    this.particles.emitParticleAt(this.player.x, this.player.y, 5);
+                });
+
+                this.timeEvent = this.time.addEvent({
+                    delay: 1000,
+                    callback: () => {
+                        if (!this.isGameOver) {
+                            this.timeLeft--;
+                            this.events.emit('updateUI', { time: this.timeLeft, score: this.score });
+                            if (this.timeLeft <= 0) this.gameOver();
+                        }
+                    },
+                    loop: true
+                });
+
+                this.scene.launch('UIScene');
+            }
+
+            // --- 시각적 이펙트(VFX) 헬퍼 ---
+            createBurst(x, y, color, qty=15) {
+                let p = this.add.particles(0, 0, 'player', {
+                    x: x, y: y,
+                    speed: { min: 100, max: 300 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 0.3, end: 0 },
+                    tint: color,
+                    lifespan: 400,
+                    blendMode: 'ADD',
+                    quantity: qty,
+                    emitting: false
+                });
+                p.explode();
+                this.time.delayedCall(500, () => p.destroy());
+            }
+
+            checkDashCollider() { return !this.isDashing; }
+
+            hitPlatform(player, platform) {
+                if (player.body.touching.down) {
+                    SFX.bounce();
+                    player.setVelocityY(-500);
+                    this.createBurst(player.x, player.y + 16, 0x808080, 10);
+                }
+            }
+
+            hitPinball(player, pinball) {
+                if (player.body.touching.down) {
+                    SFX.pinball();
+                    player.setVelocityY(-1200); 
+                    this.createBurst(pinball.x, pinball.y, 0xff8800, 20);
+                    this.cameras.main.shake(100, 0.01);
+                }
+            }
+
+            hitMonster(player, monster) {
+                this.gameOver();
+            }
+
+            collectItem(player, item) {
+                SFX.item();
+                if (item.texture.key === 'timeItem') {
+                    this.timeLeft += 5;
+                    this.createBurst(item.x, item.y, 0x00ff00);
+                    this.events.emit('showTextMsg', '+5 SEC!', item.x, item.y, '#00ff00');
+                } else if (item.texture.key === 'dashItem') {
+                    this.activateDash();
+                    this.createBurst(item.x, item.y, 0xffff00);
+                    this.events.emit('showTextMsg', 'DASH!', item.x, item.y, '#ffff00');
+                }
+                item.destroy();
+                this.events.emit('updateUI', { time: this.timeLeft, score: this.score });
+            }
+
+            // 대쉬 및 슬로우 모션 연출
+            activateDash() {
+                if (this.isDashing) return;
+                this.isDashing = true;
+                SFX.dash();
+
+                this.player.setTint(0xffff00);
+                this.player.setVelocityY(1500); 
+                this.particles.setParticleSpeed(300);
+                this.particles.setParticleTint(0xffff00);
+                this.particles.start();
+
+                // 1.5초 후: 무적이 끝나가며 살짝 느려지는 불릿타임(Slow-mo) 연출
+                this.time.delayedCall(1500, () => {
+                    if(this.isGameOver) return;
+                    
+                    // 무중력처럼 속도를 확 줄임
+                    this.player.setVelocityY(100); 
+                    this.player.body.setGravityY(100); // 일시적 저중력
+                    
+                    // 줌 인 효과
+                    this.cameras.main.zoomTo(1.3, 200, 'Sine.easeOut');
+                    
+                    // 0.5초 대기 후 속도/중력/카메라 정상화
+                    this.time.delayedCall(500, () => {
+                        if(this.isGameOver) return;
+                        this.isDashing = false;
+                        this.player.clearTint();
+                        this.player.body.setGravityY(800);
+                        
+                        this.cameras.main.zoomTo(1, 200, 'Sine.easeIn');
+                        this.particles.setParticleTint(0x00ffff);
+                        this.particles.stop();
+                    });
+                });
+            }
+
+            update() {
+                if (this.isGameOver) return;
+
+                let currentDepth = Math.max(0, Math.floor(this.player.y / 100));
+                if (currentDepth > this.score) {
+                    this.score = currentDepth;
+                    this.events.emit('updateUI', { time: this.timeLeft, score: this.score });
+                }
+
+                if (this.player.x < -16) this.player.x = q + 16;
+                if (this.player.x > q + 16) this.player.x = -16;
+
+                while (this.nextY < this.player.y + _ + 200) {
+                    this.generateObstacleRow(this.nextY);
+                    this.nextY += this.floorSpacing;
+                }
+
+                let cleanupY = this.cameras.main.scrollY - 200;
+                [this.platforms, this.pinballs, this.monsters, this.items].forEach(group => {
+                    group.children.iterate((child) => {
+                        if (child && child.y < cleanupY) child.destroy();
+                    });
+                });
+                
+                this.platforms.children.iterate((child) => {
+                    if (child && child.active && child.body && child.isRotating) {
+                        child.angle += 2;
+                        child.refreshBody();
+                    }
+                });
+
+                if (this.isDashing) {
+                    this.particles.emitParticleAt(this.player.x, this.player.y, 1);
+                }
+            }
+
+            generateObstacleRow(yPos) {
+                let numObjects = Phaser.Math.Between(1, 2);
+                let xPositions = [];
+                for(let i=0; i<numObjects; i++) {
+                    xPositions.push(Phaser.Math.Between(50, q - 50));
+                }
+
+                xPositions.forEach(xPos => {
+                    let type = Phaser.Math.Between(1, 100);
+
+                    if (type <= 30) {
+                        let p = this.platforms.create(xPos, yPos, 'platform');
+                        p.setScale(Phaser.Math.FloatBetween(0.5, 1.2), 1);
+                    } else if (type <= 45) {
+                        let p = this.platforms.create(xPos, yPos, 'platform').setScale(0.8);
+                        this.tweens.add({
+                            targets: p, x: xPos > q/2 ? xPos - 150 : xPos + 150,
+                            duration: Phaser.Math.Between(1500, 2500), yoyo: true, repeat: -1,
+                            onUpdate: () => { if (p && p.body) p.refreshBody(); }
+                        });
+                    } else if (type <= 55) {
+                        let p = this.platforms.create(xPos, yPos, 'platform');
+                        p.isRotating = true;
+                    } else if (type <= 65) {
+                        let p = this.platforms.create(xPos, yPos, 'platform').setScale(0.6);
+                        this.tweens.add({
+                            targets: p, y: yPos + 100,
+                            duration: 1000, yoyo: true, repeat: -1,
+                            onUpdate: () => { if (p && p.body) p.refreshBody(); }
+                        });
+                    } else if (type <= 75) {
+                        this.pinballs.create(xPos, yPos, 'pinball');
+                    } else if (type <= 85) {
+                        this.monsters.create(xPos, yPos, 'monster');
+                    } else if (type <= 95) {
+                        this.items.create(xPos, yPos, 'timeItem');
+                    } else {
+                        this.items.create(xPos, yPos, 'dashItem');
+                    }
+                });
+            }
+
+            gameOver() {
+                if (this.isGameOver) return; // 중복 실행 방지
+                
+                this.isGameOver = true;
+                this.timeEvent.remove();
+                
+                SFX.death(); // 사망 사운드
+                
+                // 플레이어를 숨기고 물리 충돌 비활성화
+                this.player.setVisible(false);
+                this.player.body.enable = false;
+                this.physics.pause(); 
+
+                // 산산조각(Shatter) 파티클 이펙트
+                let shatter = this.add.particles(0, 0, 'player', {
+                    x: this.player.x, y: this.player.y,
+                    speed: { min: 100, max: 600 },
+                    angle: { min: 0, max: 360 },
+                    gravityY: 1000,
+                    scale: { start: 0.5, end: 0 },
+                    tint: 0x00ffff,
+                    lifespan: 1500,
+                    quantity: 40,
+                    emitting: false
+                });
+                shatter.explode();
+
+                // 화면 흔들림 및 붉은 섬광 연출
+                this.cameras.main.shake(400, 0.03);
+                this.cameras.main.flash(400, 255, 0, 0);
+
+                // 연출이 끝난 후 게임오버 팝업으로 이동 (1.5초 지연)
+                this.time.delayedCall(1500, () => {
+                    this.scene.stop('UIScene');
+                    this.scene.launch('GameOverScene', { score: this.score });
+                });
+            }
+        }
+
+        // 4. UIScene: 실시간 점수 및 시간, 메시지 표시
+        class UIScene extends Phaser.Scene {
+            constructor() { super('UIScene'); }
+            create() {
+                this.timeText = this.add.text(20, 20, 'TIME: 45', {
+                    fontFamily: 'Orbitron', fontWeight: '700', fontSize: '24px', color: '#00ff00'
+                });
+
+                this.scoreText = this.add.text(q - 20, 20, 'DEPTH: 0', {
+                    fontFamily: 'Orbitron', fontWeight: '700', fontSize: '24px', color: '#00ffff'
+                }).setOrigin(1, 0);
+
+                const main = this.scene.get('PlayScene');
+                main.events.on('updateUI', (data) => {
+                    this.timeText.setText('TIME: ' + data.time);
+                    if (data.time <= 10) this.timeText.setColor('#ff0000'); 
+                    else this.timeText.setColor('#00ff00');
+                    
+                    this.scoreText.setText('DEPTH: ' + data.score);
+                });
+
+                main.events.on('showTextMsg', (msg, x, y, color) => {
+                    let floatText = this.add.text(q/2, _/4, msg, {
+                        fontFamily: 'Orbitron', fontWeight: '900', fontSize: '32px', color: color
+                    }).setOrigin(0.5).setShadow(0, 0, color, 10, true, true);
+
+                    this.tweens.add({
+                        targets: floatText, y: _/4 - 50, alpha: 0, duration: 1000,
+                        onComplete: () => floatText.destroy()
+                    });
+                });
+            }
+        }
+
+        // 5. GameOverScene: 결과 화면
+        class GameOverScene extends Phaser.Scene {
+            constructor() { super('GameOverScene'); }
+            create(data) {
+                const overlay = this.add.graphics();
+                overlay.fillStyle(0x000000, 0.7);
+                overlay.fillRect(0, 0, q, _);
+
+                const panel = this.add.container(q / 2, _ / 2);
+                const panelBg = this.add.graphics();
+                panelBg.fillStyle(0x1e293b, 0.9);
+                panelBg.lineStyle(2, 0x00ffff, 1);
+                panelBg.fillRoundedRect(-150, -150, 300, 300, 20);
+                panelBg.strokeRoundedRect(-150, -150, 300, 300, 20);
+
+                const title = this.add.text(0, -90, 'GAME OVER', {
+                    fontFamily: 'Orbitron', fontWeight: '900', fontSize: '32px', color: '#ff0000'
+                }).setOrigin(0.5);
+
+                const sub = this.add.text(0, -40, 'Final Depth', {
+                    fontFamily: 'Rajdhani', fontWeight: '700', fontSize: '20px', color: '#cbd5e1'
+                }).setOrigin(0.5);
+
+                const scoreVal = this.add.text(0, 10, data.score.toLocaleString() + ' F', {
+                    fontFamily: 'Orbitron', fontWeight: '700', fontSize: '42px', color: '#00ffff'
+                }).setOrigin(0.5);
+
+                const lobbyBtn = this.add.container(0, 90);
+                const btnBg = this.add.graphics();
+                btnBg.fillStyle(0x00ffff, 0.2);
+                // RETRY / LOBBY 버튼의 테두리 색상을 하늘색으로 변경
+                btnBg.lineStyle(2, 0x00ffff, 1);
+                btnBg.fillRoundedRect(-100, -25, 200, 50, 25);
+                btnBg.strokeRoundedRect(-100, -25, 200, 50, 25);
+                
+                const btnText = this.add.text(0, 0, 'RETRY / LOBBY', {
+                    fontFamily: 'Orbitron', fontWeight: '700', fontSize: '18px', color: '#ffffff'
+                }).setOrigin(0.5);
+
+                lobbyBtn.add([btnBg, btnText]);
+                lobbyBtn.setSize(200, 50).setInteractive({ useHandCursor: true });
+                lobbyBtn.on('pointerdown', () => {
+                    initAudio();
+                    this.scene.start('MenuScene');
+                    this.scene.stop('PlayScene');
+                });
+
+                panel.add([panelBg, title, sub, scoreVal, lobbyBtn]);
+                panel.setScale(0);
+                this.tweens.add({ targets: panel, scale: 1, duration: 500, ease: 'Back.easeOut' });
+            }
+        }
+
+        // --- 게임 초기화 로직 ---
+        const config = {
+            type: Phaser.AUTO, width: q, height: _, parent: 'game-container',
+            physics: { default: 'arcade', arcade: { gravity: { y: 1000 }, debug: false } },
+            scene: [BootScene, MenuScene, PlayScene, UIScene, GameOverScene]
+        };
+
+        let game;
+        function initGame() {
+            game = new Phaser.Game(config);
+            window.addEventListener('resize', () => {
+                q = window.innerWidth > 480 ? 480 : window.innerWidth;
+                _ = window.innerHeight;
+                game.scale.resize(q, _);
+            });
+        }
+
+        // 폰트가 완전히 로드된 후 게임을 시작하여 초기 폰트 깨짐(기본 폰트 노출) 현상 방지
+        if (document.fonts) {
+            Promise.all([
+                document.fonts.load('10pt "Orbitron"'),
+                document.fonts.load('10pt "Rajdhani"')
+            ]).then(() => {
+                initGame();
+            }).catch(() => {
+                initGame(); // 로드 실패 시에도 일단 게임은 실행
+            });
+        } else {
+            initGame(); // 구형 브라우저 대응
+        }
+    </script>
+</body>
+</html>
