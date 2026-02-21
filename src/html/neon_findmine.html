@@ -28,7 +28,6 @@
             justify-content: center;
             align-items: center;
             background-color: var(--bg-dark);
-            /* 배경 노이즈 및 그라데이션 효과 */
             background-image: 
                 radial-gradient(circle at center, transparent, rgba(0,0,0,0.9)),
                 repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(255,0,0,0.015) 1px, rgba(255,0,0,0.015) 2px);
@@ -47,7 +46,6 @@
             max-width: 95vw;
         }
 
-        /* 피가 흐르는 타이틀 */
         .title {
             font-family: 'Nosifer', cursive;
             font-size: 2rem;
@@ -63,7 +61,6 @@
             50% { transform: scale(1.03); filter: brightness(1.4); }
         }
 
-        /* 난이도 선택 */
         .difficulty-nav {
             display: flex;
             gap: 10px;
@@ -96,7 +93,6 @@
             box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
         }
 
-        /* 상태바 */
         .status-panel {
             display: flex;
             justify-content: space-between;
@@ -140,7 +136,6 @@
 
         #face-btn:active { transform: scale(0.9); }
 
-        /* 그리드 */
         .grid-container {
             max-height: 60vh;
             overflow: auto;
@@ -182,7 +177,6 @@
             cursor: default;
         }
 
-        /* 숫자별 색상 (고딕 톤) */
         .c1 { color: #4a5d7e; }
         .c2 { color: #4a7e5d; }
         .c3 { color: #8b2a2a; }
@@ -208,7 +202,6 @@
             font-size: 1.2rem;
         }
 
-        /* 전체 화면 점멸 효과 */
         @keyframes flash-red {
             0% { background-color: var(--bg-dark); }
             50% { background-color: #400; }
@@ -217,10 +210,21 @@
 
         .flash { animation: flash-red 0.3s 2; }
 
-        /* 스크롤바 */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #000; }
         ::-webkit-scrollbar-thumb { background: var(--blood-red); border-radius: 3px; }
+
+        /* 사운드 안내 메시지 */
+        #audio-hint {
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 0.6rem;
+            color: #444;
+            letter-spacing: 1px;
+        }
     </style>
 </head>
 <body>
@@ -249,9 +253,91 @@
     <div class="grid-container">
         <div id="grid"></div>
     </div>
+    <div id="audio-hint">CLICK ANYWHERE TO ENABLE SOUNDS</div>
 </div>
 
 <script>
+    // --- 사운드 엔진 (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const masterGain = audioCtx.createGain();
+        masterGain.connect(audioCtx.destination);
+        masterGain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+
+        switch(type) {
+            case 'click':
+                const oscClick = audioCtx.createOscillator();
+                const gainClick = audioCtx.createGain();
+                oscClick.type = 'sine';
+                oscClick.frequency.setValueAtTime(800, audioCtx.currentTime);
+                oscClick.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+                gainClick.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainClick.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscClick.connect(gainClick);
+                gainClick.connect(masterGain);
+                oscClick.start();
+                oscClick.stop(audioCtx.currentTime + 0.1);
+                break;
+
+            case 'explosion':
+                const bufferSize = audioCtx.sampleRate * 1.5;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.setValueAtTime(600, audioCtx.currentTime);
+                noiseFilter.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 1.2);
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(1, audioCtx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(masterGain);
+                noise.start();
+                noise.stop(audioCtx.currentTime + 1.2);
+                break;
+
+            case 'win':
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.15);
+                    g.gain.setValueAtTime(0.1, audioCtx.currentTime + i * 0.15);
+                    g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i * 0.15 + 0.1);
+                    osc.connect(g);
+                    g.connect(masterGain);
+                    osc.start(audioCtx.currentTime + i * 0.15);
+                    osc.stop(audioCtx.currentTime + i * 0.15 + 0.1);
+                });
+                break;
+
+            case 'init':
+                const oscInit = audioCtx.createOscillator();
+                const gainInit = audioCtx.createGain();
+                oscInit.type = 'triangle';
+                oscInit.frequency.setValueAtTime(100, audioCtx.currentTime);
+                oscInit.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.3);
+                gainInit.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainInit.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscInit.connect(gainInit);
+                gainInit.connect(masterGain);
+                oscInit.start();
+                oscInit.stop(audioCtx.currentTime + 0.3);
+                break;
+        }
+    }
+
+    // --- 게임 로직 ---
     const levels = {
         easy: { r: 10, c: 10, m: 10 },
         medium: { r: 15, c: 15, m: 40 },
@@ -281,6 +367,7 @@
     }
 
     function initGame() {
+        playSound('init');
         const { r, c, m } = levels[curMode];
         board = [];
         revealed = 0;
@@ -312,13 +399,8 @@
 
     function handleInput(e, r, c) {
         if (isOver) return;
-        
-        // 왼쪽 클릭 (0) 또는 오른쪽 클릭 (2)
-        if (e.button === 0) {
-            onLeftClick(r, c);
-        } else if (e.button === 2) {
-            onRightClick(r, c);
-        }
+        if (e.button === 0) onLeftClick(r, c);
+        else if (e.button === 2) onRightClick(r, c);
     }
 
     function onLeftClick(r, c) {
@@ -336,12 +418,13 @@
             return;
         }
 
+        playSound('click');
         reveal(r, c);
         checkWin();
     }
 
     function onRightClick(r, c) {
-        if (isFirst) return; // 첫 클릭 전에는 깃발 금지
+        if (isFirst) return;
         const cell = board[r][c];
         if (cell.open) return;
 
@@ -352,6 +435,7 @@
         flags += cell.flag ? 1 : -1;
         const remaining = levels[curMode].m - flags;
         mineEl.innerText = String(Math.max(0, remaining)).padStart(3, '0');
+        playSound('click');
     }
 
     function setupMines(exR, exC) {
@@ -360,8 +444,6 @@
         while (placed < m) {
             let rr = Math.floor(Math.random() * r);
             let cc = Math.floor(Math.random() * c);
-            
-            // 첫 클릭 지점 및 주변 8칸 제외 (보고서 규칙 준수)
             if (!board[rr][cc].mine && (Math.abs(rr - exR) > 1 || Math.abs(cc - exC) > 1)) {
                 board[rr][cc].mine = true;
                 placed++;
@@ -383,7 +465,6 @@
             cell.el.innerText = count;
             cell.el.classList.add('c' + count);
         } else {
-            // 빈 칸 확장
             for (let dr = -1; dr <= 1; dr++) {
                 for (let dc = -1; dc <= 1; dc++) {
                     reveal(r + dr, c + dc);
@@ -427,120 +508,26 @@
         stopTimer();
         faceBtn.innerText = win ? '🧛' : '🩸';
         
-        if (!win) {
+        if (win) {
+            playSound('win');
+        } else {
+            playSound('explosion');
             document.body.classList.add('flash');
             setTimeout(() => document.body.classList.remove('flash'), 600);
         }
 
-        // 지뢰 전체 공개
         board.forEach(row => row.forEach(cell => {
             if (cell.mine) {
                 cell.el.innerText = '💥';
                 cell.el.classList.add('mine');
             } else if (cell.flag) {
-                cell.el.innerText = '❌'; // 잘못된 깃발
+                cell.el.innerText = '❌';
             }
         }));
     }
 
     // 초기 실행
     initGame();
-</script>
-<script>
-    (() => {
-        if (window.__mgpBridgeInstalled) return;
-        window.__mgpBridgeInstalled = true;
-
-        const metrics = {
-            startedAt: Date.now(),
-            stageClears: 0,
-            itemsCollected: 0,
-            itemCounts: {},
-            lastScore: 0,
-            bestStage: 1,
-            sent: false
-        };
-
-        const difficultyLevel = (mode) => {
-            if (mode === 'hard') return 3;
-            if (mode === 'medium') return 2;
-            return 1;
-        };
-
-        const addItem = (itemId, count = 1) => {
-            if (!itemId) return;
-            const safeCount = Math.max(1, Math.floor(Number(count) || 1));
-            metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
-            metrics.itemsCollected += safeCount;
-        };
-
-        const calcScore = (win) => {
-            const mult = difficultyLevel(curMode);
-            if (win) {
-                return Math.floor((revealed * 12) + Math.max(0, (1200 - (time * 3)) * mult));
-            }
-            return Math.floor(revealed * 2);
-        };
-
-        const snapshot = () => ({
-            score: Math.floor(metrics.lastScore || 0),
-            level: Math.floor(metrics.bestStage || 1),
-            maxCombo: 0,
-            comboCount: 0,
-            stageClears: Math.floor(metrics.stageClears),
-            itemsCollected: Math.floor(metrics.itemsCollected),
-            itemCounts: { ...metrics.itemCounts },
-            duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
-        });
-
-        const postResult = (force = false) => {
-            if (metrics.sent && !force) return;
-            parent.postMessage({
-                source: 'mgp-game',
-                type: 'result',
-                payload: snapshot()
-            }, '*');
-            metrics.sent = true;
-        };
-
-        if (typeof onRightClick === 'function') {
-            const originalOnRightClick = onRightClick;
-            onRightClick = function () {
-                const beforeFlags = flags;
-                const result = originalOnRightClick.apply(this, arguments);
-                if (flags > beforeFlags) {
-                    addItem('flag', flags - beforeFlags);
-                }
-                return result;
-            };
-        }
-
-        if (typeof endGame === 'function') {
-            const originalEndGame = endGame;
-            endGame = function (win) {
-                const result = originalEndGame.apply(this, arguments);
-                metrics.lastScore = calcScore(Boolean(win));
-                metrics.bestStage = Math.max(metrics.bestStage, difficultyLevel(curMode));
-                if (win) {
-                    metrics.stageClears += 1;
-                }
-                postResult();
-                return result;
-            };
-        }
-
-        if (typeof initGame === 'function') {
-            const originalInitGame = initGame;
-            initGame = function () {
-                metrics.startedAt = Date.now();
-                metrics.sent = false;
-                return originalInitGame.apply(this, arguments);
-            };
-        }
-
-        window.__mgpSnapshot = snapshot;
-        window.addEventListener('beforeunload', () => postResult(true));
-    })();
 </script>
 
 </body>

@@ -265,13 +265,53 @@
     </div>
 
     <script>
+        // --- Retro Sound Engine (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(freq, type, duration, vol = 0.1, ramp = true) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            if (ramp) gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        const sounds = {
+            tick: () => playSound(880, 'triangle', 0.05, 0.05),
+            spin: () => playSound(110, 'sawtooth', 0.1, 0.03),
+            win: () => {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C-E-G-C arpeggio
+                notes.forEach((n, i) => {
+                    setTimeout(() => playSound(n, 'square', 0.2, 0.05), i * 100);
+                });
+            },
+            clear: () => {
+                const fanfare = [523.25, 523.25, 523.25, 698.46, 880.00];
+                fanfare.forEach((n, i) => {
+                    setTimeout(() => playSound(n, 'square', 0.3, 0.05), i * 150);
+                });
+            },
+            gameOver: () => {
+                const sad = [392.00, 349.23, 311.13, 261.63];
+                sad.forEach((n, i) => {
+                    setTimeout(() => playSound(n, 'sawtooth', 0.5, 0.05, false), i * 300);
+                });
+            }
+        };
+
         // --- Configuration ---
         const SYMBOLS = ['🍎', '🍋', '🍒', '🔔', '7️⃣', '💀'];
         const SYMBOL_SCORES = { '🍎': 2, '🍋': 2, '🍒': 2, '🔔': 5, '7️⃣': 10, '💀': -3 };
         const BINGO_LINES = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-            [0, 4, 8], [2, 4, 6]             // Diagonals
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
         ];
 
         // --- Game State ---
@@ -320,7 +360,6 @@
             
             updateLuckDescription();
 
-            // Multiplier inputs generation
             elements.multInputs.innerHTML = '';
             for (let i = 0; i < 9; i++) {
                 const input = document.createElement('input');
@@ -334,7 +373,6 @@
                 elements.multInputs.appendChild(input);
             }
 
-            // Slot grid generation
             elements.gameGrid.innerHTML = '';
             for (let i = 0; i < 9; i++) {
                 const cell = document.createElement('div');
@@ -417,7 +455,6 @@
             weights['💀'] += (betWeightFactor * 30) - 10;
 
             if (state.isSkullBingoOccurred) {
-                // Recovery Mode Logic
                 const recoveryBaseSkull = 2;
                 const riskPenaltySkull = betWeightFactor * 15; 
                 weights['💀'] = recoveryBaseSkull + riskPenaltySkull; 
@@ -458,15 +495,14 @@
             elements.baseBetVal.textContent = `$${state.baseBet}`;
             elements.totalCostVal.textContent = `$${currentCost}`;
 
-            // Safety check for Game Over
             if (state.money < minBet && !state.isSpinning) {
                 elements.spinBtn.disabled = true;
                 elements.statusMsg.textContent = "GAME OVER";
+                sounds.gameOver();
                 showOverlay("GAME OVER", "자금이 부족하여 더 이상 게임을 지속할 수 없습니다.", "RETRY");
                 return;
             }
 
-            // Safety Reset trigger
             if (state.money < currentCost && !state.isSpinning) {
                 if (state.money >= minBet) {
                     resetMultipliersToMinimum();
@@ -479,9 +515,9 @@
                 if (!state.isSpinning) elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY READY" : "READY";
             }
 
-            // Stage Clear trigger
             if (state.stageEarned >= state.target && !state.isSpinning && !state.isStageCleared) {
                 state.isStageCleared = true;
+                sounds.clear();
                 showOverlay("STAGE CLEAR", "목표 금액을 달성했습니다!", "NEXT STAGE");
             }
         }
@@ -508,6 +544,7 @@
                         const tick = isLoss ? -current : current;
                         state.money = startMoney + tick;
                         state.stageEarned = Math.max(0, startStageEarned + tick);
+                        sounds.tick();
                         updateDisplays();
                         requestAnimationFrame(animate);
                     }
@@ -520,13 +557,15 @@
             const cost = calculateTotalCost();
             if (state.money < cost) return;
 
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
             state.isSpinning = true;
             state.money -= cost;
             updateDisplays();
             
             elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY SPINNING..." : "SPINNING...";
+            sounds.spin();
 
-            // Visual spin start
             const cells = document.querySelectorAll('.slot-cell');
             cells.forEach(c => {
                 c.classList.remove('winning', 'losing');
@@ -546,7 +585,6 @@
                 }
                 state.currentSlots = results;
                 
-                // Settlement
                 await checkWins();
                 
                 state.isSpinning = false;
@@ -591,6 +629,7 @@
                 if (totalDelta > 0) {
                     elements.container.classList.add('shake');
                     showToast(`WIN +$${totalDelta}`, 'var(--neon-pink)');
+                    sounds.win();
                     winningLines.flat().forEach(idx => document.getElementById(`cell-${idx}`).classList.add('winning'));
                 } else if (totalDelta < 0) {
                     elements.container.classList.add('bg-dim');
@@ -602,8 +641,6 @@
                 await updateMoneyAnimated(totalDelta);
             }
         }
-
-        // --- Utility UI ---
 
         function showToast(msg, color) {
             elements.toast.textContent = msg;
@@ -634,123 +671,7 @@
 
         elements.spinBtn.onclick = spin;
 
-        // --- Start Game ---
         window.onload = init;
-    </script>
-    <script>
-        (() => {
-            if (window.__mgpBridgeInstalled) return;
-            window.__mgpBridgeInstalled = true;
-
-            const metrics = {
-                startedAt: Date.now(),
-                stageClears: 0,
-                itemsCollected: 0,
-                itemCounts: {},
-                sent: false
-            };
-
-            const addItem = (itemId, count = 1) => {
-                if (!itemId) return;
-                const safeCount = Math.max(1, Math.floor(Number(count) || 1));
-                metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
-                metrics.itemsCollected += safeCount;
-            };
-
-            const countLines = () => {
-                let regular = 0;
-                let skull = 0;
-                if (!Array.isArray(state?.currentSlots)) return { regular, skull };
-
-                BINGO_LINES.forEach((line) => {
-                    const [a, b, c] = line;
-                    const symbol = state.currentSlots[a];
-                    if (!symbol) return;
-                    if (state.currentSlots[a] !== state.currentSlots[b] || state.currentSlots[b] !== state.currentSlots[c]) return;
-                    const score = Number(SYMBOL_SCORES[symbol] || 0);
-                    if (score < 0) skull += 1;
-                    if (score > 0) regular += 1;
-                });
-
-                return { regular, skull };
-            };
-
-            const snapshot = () => ({
-                score: Math.floor(Number(state?.money || 0)),
-                level: Math.floor(Number(state?.stage || 1)),
-                maxCombo: 0,
-                comboCount: 0,
-                stageClears: Math.floor(metrics.stageClears),
-                itemsCollected: Math.floor(metrics.itemsCollected),
-                itemCounts: { ...metrics.itemCounts },
-                duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
-            });
-
-            const postResult = (force = false) => {
-                if (metrics.sent && !force) return;
-                parent.postMessage({
-                    source: 'mgp-game',
-                    type: 'result',
-                    payload: snapshot()
-                }, '*');
-                metrics.sent = true;
-            };
-
-            if (typeof spin === 'function') {
-                const originalSpin = spin;
-                spin = async function () {
-                    addItem('spin_chip', 1);
-                    return originalSpin.apply(this, arguments);
-                };
-            }
-
-            if (typeof checkWins === 'function') {
-                const originalCheckWins = checkWins;
-                checkWins = async function () {
-                    const result = await originalCheckWins.apply(this, arguments);
-                    const lines = countLines();
-                    if (lines.regular > 0) addItem('bingo', lines.regular);
-                    if (lines.skull > 0) addItem('skull_bingo', lines.skull);
-                    return result;
-                };
-            }
-
-            if (typeof showOverlay === 'function') {
-                const originalShowOverlay = showOverlay;
-                showOverlay = function (title) {
-                    const result = originalShowOverlay.apply(this, arguments);
-                    if (String(title).toUpperCase().includes('GAME OVER')) {
-                        postResult();
-                    }
-                    return result;
-                };
-            }
-
-            if (elements?.overlayBtn) {
-                const originalOverlayClick = elements.overlayBtn.onclick;
-                elements.overlayBtn.onclick = function () {
-                    const beforeStage = Math.floor(Number(state?.stage || 1));
-                    const result = originalOverlayClick?.apply(this, arguments);
-                    const afterStage = Math.floor(Number(state?.stage || 1));
-                    if (afterStage > beforeStage) {
-                        metrics.stageClears += (afterStage - beforeStage);
-                    }
-                    return result;
-                };
-            }
-
-            if (typeof init === 'function') {
-                const originalInit = init;
-                init = function () {
-                    metrics.startedAt = Date.now();
-                    metrics.sent = false;
-                    return originalInit.apply(this, arguments);
-                };
-            }
-
-            window.__mgpSnapshot = snapshot;
-            window.addEventListener('beforeunload', () => postResult(true));
-        })();
     </script>
 </body>
 </html>

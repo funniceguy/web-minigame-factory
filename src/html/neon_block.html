@@ -282,6 +282,71 @@
     <script>
         const apiKey = ""; // Runtime key
 
+        // --- Sound System (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSfx(type) {
+            try {
+                // 브라우저 정책상 사용자 상호작용 후 오디오 재생 가능
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                
+                const t = audioCtx.currentTime;
+                const playTone = (freq, waveType, dur, vol, startTime=t) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = waveType;
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    gain.gain.setValueAtTime(vol, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, startTime + dur);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + dur);
+                };
+
+                switch(type) {
+                    case 'bounce': 
+                        // 패드 튕김: 짧고 통통 튀는 사인파
+                        playTone(400, 'sine', 0.1, 0.2); 
+                        break;
+                    case 'break': 
+                        // 블럭 격파: 무작위 주파수의 짧은 스퀘어파 (파편 느낌)
+                        playTone(800 + Math.random()*200, 'square', 0.1, 0.05); 
+                        break;
+                    case 'itemOpen': 
+                        // 아이템 상자(스페셜 블럭) 오픈: 영롱하게 올라가는 소리
+                        playTone(300, 'sine', 0.1, 0.1, t);
+                        playTone(400, 'sine', 0.1, 0.1, t+0.05);
+                        playTone(500, 'sine', 0.1, 0.1, t+0.1);
+                        playTone(600, 'sine', 0.1, 0.1, t+0.15);
+                        break;
+                    case 'itemSelect':
+                        // 아이템 획득 (파워업): 1-UP 느낌의 스퀘어파
+                        playTone(440, 'square', 0.1, 0.1, t);
+                        playTone(554, 'square', 0.1, 0.1, t+0.1);
+                        playTone(659, 'square', 0.1, 0.1, t+0.2);
+                        playTone(880, 'square', 0.2, 0.1, t+0.3);
+                        break;
+                    case 'stageClear':
+                        // 스테이지 클리어: 승리의 멜로디
+                        playTone(523.25, 'triangle', 0.2, 0.2, t);
+                        playTone(659.25, 'triangle', 0.2, 0.2, t+0.15);
+                        playTone(783.99, 'triangle', 0.2, 0.2, t+0.3);
+                        playTone(1046.50, 'triangle', 0.4, 0.2, t+0.45);
+                        break;
+                    case 'gameOver':
+                        // 게임 오버: 둔탁하게 하락하는 톱니파
+                        playTone(300, 'sawtooth', 0.4, 0.2, t);
+                        playTone(250, 'sawtooth', 0.4, 0.2, t+0.3);
+                        playTone(200, 'sawtooth', 0.4, 0.2, t+0.6);
+                        playTone(150, 'sawtooth', 0.6, 0.2, t+0.9);
+                        break;
+                }
+            } catch(e) {
+                console.warn("Sound play failed", e);
+            }
+        }
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let animationId;
@@ -602,6 +667,7 @@
                     if(shieldActive) {
                         ball.dy = -Math.abs(ball.dy); 
                         shieldActive = false; 
+                        playSfx('bounce'); // 쉴드 튕김음
                         createParticles(ball.x, canvas.height, '#00ffff');
                         updateAiCommentary("쉴드 발동! 위기를 모면했습니다!", true);
                     } else if (ball.y > canvas.height + 20) {
@@ -614,6 +680,8 @@
                    ball.y - ball.radius <= paddle.y + paddle.height &&
                    ball.x >= paddle.x && ball.x <= paddle.x + upgrades.paddleWidth) {
                     
+                    playSfx('bounce'); // 패들 튕김음
+
                     let hitPoint = (ball.x - (paddle.x + upgrades.paddleWidth / 2)) / (upgrades.paddleWidth / 2);
                     hitPoint += paddleVel * 0.15;
                     hitPoint = Math.max(-1.3, Math.min(1.3, hitPoint));
@@ -667,6 +735,7 @@
             blk.hp -= dmg;
             createParticles(blk.x + blk.w/2, blk.y + blk.h/2, blk.color, 2); 
             if(blk.hp <= 0) {
+                playSfx('break'); // 블럭 파괴음
                 createParticles(blk.x + blk.w/2, blk.y + blk.h/2, blk.color, 8);
                 gameState.score += (blk.isSpecial ? 50 : 10);
                 if (blk.isSpecial) triggerSpecialItem();
@@ -678,6 +747,7 @@
         }
 
         function triggerSpecialItem() {
+            playSfx('itemOpen'); // 아이템 상자 오픈음
             gameState.state = 'CARD_SELECT';
             gameState.itemSelectionType = 'SPECIAL_ITEM';
             cardTitle.innerText = "SPECIAL ITEM!";
@@ -866,6 +936,8 @@
         }
 
         function selectCard(card) {
+            playSfx('itemSelect'); // 아이템 선택음
+            
             if(card.id === 'multiball') {
                 upgrades.extraBalls++;
                 // Instant spawn if special item
@@ -925,6 +997,7 @@
         }
 
         function levelCleared() {
+            playSfx('stageClear'); // 스테이지 클리어음
             gameState.state = 'CARD_SELECT';
             gameState.itemSelectionType = 'LEVEL_CLEAR';
             cardTitle.innerText = "STAGE CLEARED!";
@@ -935,6 +1008,7 @@
         }
 
         function gameOver(isTimeout = false) {
+            playSfx('gameOver'); // 게임 오버음
             gameState.state = 'GAMEOVER';
             if(isTimeout) gameState.timeLeft = 0; 
             showOverlay('GAMEOVER');
@@ -946,6 +1020,7 @@
         }
 
         function startGame() {
+            if(audioCtx.state === 'suspended') audioCtx.resume(); // 게임 시작 시 오디오 컨텍스트 강제 활성화
             resetGame();
             gameState.state = 'PLAYING';
             gameState.timeScale = 1.0; 
@@ -1015,102 +1090,6 @@
         showOverlay('START');
         requestAnimationFrame(loop);
 
-    </script>
-    <script>
-        (function () {
-            if (window.__mgpBridgeInstalled) return;
-            window.__mgpBridgeInstalled = true;
-
-            const metrics = {
-                startedAt: Date.now(),
-                stageClears: 0,
-                maxCombo: 0,
-                itemsCollected: 0,
-                itemCounts: {},
-                sent: false
-            };
-
-            function addItem(itemId, count = 1) {
-                if (!itemId) return;
-                const safeCount = Math.max(1, Math.floor(Number(count) || 1));
-                metrics.itemCounts[itemId] = (metrics.itemCounts[itemId] || 0) + safeCount;
-                metrics.itemsCollected += safeCount;
-            }
-
-            function updateLiveMetrics() {
-                try {
-                    metrics.maxCombo = Math.max(metrics.maxCombo, Number(gameState?.combo || 0));
-                } catch (error) {
-                    // no-op
-                }
-            }
-
-            function buildSnapshot() {
-                updateLiveMetrics();
-                const level = Number(gameState?.level || 1);
-                return {
-                    score: Math.floor(Number(gameState?.score || 0)),
-                    level: Math.floor(level),
-                    maxCombo: Math.floor(metrics.maxCombo),
-                    comboCount: Math.floor(metrics.maxCombo),
-                    stageClears: Math.max(metrics.stageClears, Math.max(0, Math.floor(level - 1))),
-                    itemsCollected: Math.floor(metrics.itemsCollected),
-                    itemCounts: { ...metrics.itemCounts },
-                    duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
-                };
-            }
-
-            function postResult(force = false) {
-                if (metrics.sent && !force) return;
-                parent.postMessage({
-                    source: 'mgp-game',
-                    type: 'result',
-                    payload: buildSnapshot()
-                }, '*');
-                metrics.sent = true;
-            }
-
-            if (typeof selectCard === 'function') {
-                const originalSelectCard = selectCard;
-                selectCard = function (card) {
-                    if (card?.id) addItem(card.id, 1);
-                    return originalSelectCard.apply(this, arguments);
-                };
-            }
-
-            if (typeof levelCleared === 'function') {
-                const originalLevelCleared = levelCleared;
-                levelCleared = function () {
-                    metrics.stageClears += 1;
-                    return originalLevelCleared.apply(this, arguments);
-                };
-            }
-
-            if (typeof gameOver === 'function') {
-                const originalGameOver = gameOver;
-                gameOver = function () {
-                    const result = originalGameOver.apply(this, arguments);
-                    postResult();
-                    return result;
-                };
-            }
-
-            if (typeof resetGame === 'function') {
-                const originalResetGame = resetGame;
-                resetGame = function () {
-                    metrics.startedAt = Date.now();
-                    metrics.stageClears = 0;
-                    metrics.maxCombo = 0;
-                    metrics.itemsCollected = 0;
-                    metrics.itemCounts = {};
-                    metrics.sent = false;
-                    return originalResetGame.apply(this, arguments);
-                };
-            }
-
-            window.__mgpSnapshot = buildSnapshot;
-            window.addEventListener('beforeunload', () => postResult(true));
-        })();
     </script>
 </body>
 </html>
