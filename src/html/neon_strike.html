@@ -202,15 +202,15 @@
             <span>STAGE SCORE:</span>
             <span id="scBase" class="text-neon-blue">0</span>
         </div>
-        <div class="summary-row">
+        <div class="summary-row" id="rowNoDamage">
             <span>NO DAMAGE BONUS:</span>
-            <span id="scNoDamage" class="text-neon-green">FAILED</span>
+            <span id="scNoDamage" class="text-neon-green"></span>
         </div>
-        <div class="summary-row" style="margin-bottom: 35px;">
+        <div class="summary-row" id="rowAllKill">
             <span>ALL KILL BONUS:</span>
-            <span id="scAllKill" class="text-neon-pink">FAILED</span>
+            <span id="scAllKill" class="text-neon-pink"></span>
         </div>
-        <p style="color:#aaa; font-size:0.8rem; text-align:center;">곧 다음 구역으로 진입합니다...</p>
+        <p style="color:#aaa; font-size:0.8rem; text-align:center; margin-top: 35px;">곧 다음 구역으로 진입합니다...</p>
     </div>
 
     <!-- Game Clear (Ending) Screen -->
@@ -329,7 +329,8 @@ const ui = {
     // NEW UI elements
     stageClearUI: document.getElementById('stageClearUI'), scTitle: document.getElementById('scTitle'),
     scBase: document.getElementById('scBase'), scNoDamage: document.getElementById('scNoDamage'),
-    scAllKill: document.getElementById('scAllKill'), gameClear: document.getElementById('gameClearScreen')
+    scAllKill: document.getElementById('scAllKill'), gameClear: document.getElementById('gameClearScreen'),
+    rowNoDamage: document.getElementById('rowNoDamage'), rowAllKill: document.getElementById('rowAllKill')
 };
 
 const STATE = { MENU: 0, PLAYING: 1, LEVELUP: 2, GAMEOVER: 3, PAUSED: 4 };
@@ -1053,10 +1054,21 @@ function dieEffect(enemy) {
         let allKillBonus = (game.stageEnemiesKilled >= game.stageEnemiesSpawned) ? game.stageScore * 2 : 0;
 
         ui.scBase.innerText = game.stageScore;
-        ui.scNoDamage.innerText = noDmgBonus > 0 ? `+${noDmgBonus} (x2)` : 'FAILED';
-        ui.scNoDamage.className = noDmgBonus > 0 ? 'text-neon-green' : 'text-neon-red';
-        ui.scAllKill.innerText = allKillBonus > 0 ? `+${allKillBonus} (x3)` : 'FAILED';
-        ui.scAllKill.className = allKillBonus > 0 ? 'text-neon-pink' : 'text-neon-red';
+        
+        // 획득했을 때만 표시되도록 로직 개선
+        if (noDmgBonus > 0) {
+            ui.rowNoDamage.style.display = 'flex';
+            ui.scNoDamage.innerText = `+${noDmgBonus} (x2)`;
+        } else {
+            ui.rowNoDamage.style.display = 'none';
+        }
+
+        if (allKillBonus > 0) {
+            ui.rowAllKill.style.display = 'flex';
+            ui.scAllKill.innerText = `+${allKillBonus} (x3)`;
+        } else {
+            ui.rowAllKill.style.display = 'none';
+        }
 
         game.score += (noDmgBonus + allKillBonus);
         ui.scoreText.innerText = game.score;
