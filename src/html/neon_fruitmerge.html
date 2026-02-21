@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Fruit Merge</title>
+    <!-- 폰트 로드: Orbitron, Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- Matter.js 물리 엔진 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --glass-bg: rgba(20, 24, 36, 0.4);
+            --glass-border: rgba(69, 252, 255, 0.2);
+            --neon-cyan: #45f3ff;
+            --neon-pink: #ff2a7a;
+            --neon-yellow: #ffea00;
+            --font-main: 'Orbitron', 'Noto Sans KR', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(69, 243, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(255, 42, 122, 0.08) 0%, transparent 50%);
+            font-family: var(--font-main);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 450px;
+            height: 100%;
+            max-height: 800px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-left: 1px solid var(--glass-border);
+            border-right: 1px solid var(--glass-border);
+            box-shadow: 0 0 40px rgba(69, 243, 255, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* UI 글래스 패널 - 블러 및 투명도 조절로 시인성 개선 */
+        .glass-panel {
+            background: rgba(11, 12, 16, 0.25);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        #top-ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .stat-box {
+            flex: 1;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ui-label {
+            font-size: 0.65rem;
+            color: var(--neon-cyan);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-shadow: 0 0 5px var(--neon-cyan);
+            margin-bottom: 2px;
+        }
+
+        .ui-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-shadow: 0 0 10px #fff, 0 0 15px var(--neon-cyan);
+        }
+
+        .ui-sub {
+            font-size: 0.65rem;
+            color: var(--neon-yellow);
+            text-shadow: 0 0 5px var(--neon-yellow);
+            margin-top: 2px;
+        }
+
+        /* HP 컨테이너 및 바 스타일 */
+        #hp-container {
+            position: absolute;
+            top: 90px;
+            left: 15px;
+            right: 15px;
+            height: 18px;
+            background: rgba(11, 12, 16, 0.5);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9px;
+            z-index: 10;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        #hp-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #00ffcc, var(--neon-cyan));
+            transition: width 0.3s, background 0.3s;
+            z-index: 1;
+        }
+
+        .hp-warning {
+            background: linear-gradient(90deg, #ff0055, var(--neon-pink)) !important;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        #hp-text {
+            position: relative;
+            z-index: 2;
+            font-size: 0.65rem;
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-shadow: 0 0 4px #000, 0 0 8px #000;
+        }
+
+        #next-fruit-canvas {
+            width: 50px;
+            height: 50px;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 스크린 오버레이 */
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 12, 16, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+
+        .hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .title-glitch {
+            font-size: 2.5rem;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 40px;
+            color: #fff;
+            text-shadow: 
+                0 0 5px #fff,
+                0 0 10px var(--neon-cyan),
+                0 0 20px var(--neon-cyan),
+                0 0 40px var(--neon-pink);
+            letter-spacing: 4px;
+            line-height: 1.2;
+        }
+
+        .neon-btn {
+            background: transparent;
+            color: var(--neon-cyan);
+            font-family: var(--font-main);
+            font-size: 1.2rem;
+            font-weight: 700;
+            padding: 15px 40px;
+            border: 2px solid var(--neon-cyan);
+            border-radius: 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 10px rgba(69, 243, 255, 0.2), inset 0 0 10px rgba(69, 243, 255, 0.2);
+            transition: all 0.2s ease-in-out;
+            outline: none;
+        }
+
+        .neon-btn:hover, .neon-btn:active {
+            background: var(--neon-cyan);
+            color: #000;
+            box-shadow: 0 0 20px var(--neon-cyan), 0 0 40px var(--neon-cyan);
+        }
+
+        #game-over-score {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--neon-pink);
+            text-shadow: 0 0 20px var(--neon-pink);
+            margin: 20px 0 40px 0;
+        }
+
+        /* 스테이지 클리어 팝업 */
+        #stage-clear-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            text-align: center;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #stage-clear-popup.active {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .popup-title {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan), 0 0 40px var(--neon-cyan);
+            margin: 0;
+        }
+        .popup-sub {
+            font-size: 1.2rem;
+            color: var(--neon-yellow);
+            text-shadow: 0 0 10px var(--neon-yellow);
+            margin-top: 10px;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- UI -->
+        <div id="top-ui">
+            <div class="glass-panel stat-box">
+                <span class="ui-label">STAGE</span>
+                <span class="ui-value" id="stage-display">1</span>
+            </div>
+            <div class="glass-panel stat-box" style="flex: 1.5;">
+                <span class="ui-label">SCORE</span>
+                <span class="ui-value" id="score-display">0</span>
+                <span class="ui-sub" id="target-display">TARGET: 2500</span>
+            </div>
+            <div class="glass-panel stat-box">
+                <span class="ui-label">NEXT</span>
+                <canvas id="next-fruit-canvas" width="60" height="60"></canvas>
+            </div>
+        </div>
+
+        <!-- HP 바 -->
+        <div id="hp-container">
+            <div id="hp-bar"></div>
+            <div id="hp-text">SYSTEM INTEGRITY: 100%</div>
+        </div>
+
+        <!-- 캔버스 -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- 스테이지 팝업 -->
+        <div id="stage-clear-popup">
+            <h2 class="popup-title">STAGE CLEAR!</h2>
+            <div class="popup-sub" id="stage-bonus-display">+1000 BONUS</div>
+        </div>
+
+        <!-- 시작 화면 -->
+        <div id="start-screen" class="overlay-screen">
+            <h1 class="title-glitch">NEON<br>FRUIT MERGE</h1>
+            <button class="neon-btn" id="start-btn">GAME START</button>
+        </div>
+
+        <!-- 게임 오버 -->
+        <div id="game-over-screen" class="overlay-screen hidden">
+            <h1 class="title-glitch" style="color: var(--neon-pink); text-shadow: 0 0 10px #fff, 0 0 20px var(--neon-pink), 0 0 40px var(--neon-pink);">SYSTEM OVERLOAD</h1>
+            <span class="ui-label" style="font-size: 1rem; color: #fff;">FINAL SCORE</span>
+            <div id="game-over-score">0</div>
+            <button class="neon-btn" id="restart-btn">REBOOT</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 엔진 초기화 ---
+        const Engine = Matter.Engine,
+              Render = Matter.Render,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              Composite = Matter.Composite,
+              Events = Matter.Events,
+              Sleeping = Matter.Sleeping;
+
+        // --- 과일 데이터 ---
+        const FRUITS = [
+            { radius: 11, score: 10, color: '#ff2a7a', emoji: '🍒' },
+            { radius: 17, score: 20, color: '#ff0055', emoji: '🍓' },
+            { radius: 25, score: 40, color: '#b026ff', emoji: '🍇' },
+            { radius: 31, score: 80, color: '#ff8800', emoji: '🍊' },
+            { radius: 40, score: 160, color: '#ffea00', emoji: '🍋' },
+            { radius: 49, score: 320, color: '#00ff88', emoji: '🍈' },
+            { radius: 60, score: 640, color: '#ffee55', emoji: '🍍' },
+            { radius: 71, score: 1280, color: '#ff88aa', emoji: '🍑' },
+            { radius: 83, score: 2560, color: '#aaff00', emoji: '🍏' },
+            { radius: 98, score: 5120, color: '#ff0022', emoji: '🍎' },
+            { radius: 116, score: 10240, color: '#00ffcc', emoji: '🍉' }
+        ];
+
+        // 특수 아이템 효과
+        const ITEM_EFFECTS = [
+            { id: 1, icon: '🧬', name: 'Morph' },
+            { id: 2, icon: '💥', name: 'Disassemble' },
+            { id: 3, icon: '🌀', name: 'Shuffle' },
+            { id: 4, icon: '🌋', name: 'Earthquake' },
+            { id: 5, icon: '🎯', name: 'Remove Bottom' },
+            { id: 6, icon: '💖', name: 'Heal' },
+            { id: 7, icon: '💀', name: 'Damage' }
+        ];
+
+        // --- 전역 변수 ---
+        const container = document.getElementById('game-container');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const nextCanvas = document.getElementById('next-fruit-canvas');
+        const nextCtx = nextCanvas.getContext('2d');
+        
+        let engine, world, runner;
+        let width, height;
+        let score = 0, displayScore = 0; 
+        let stage = 1, targetScore = 2500;
+        
+        let currentFruitIndex = 0, currentItemType = null;
+        let nextFruitIndex = 0, nextItemType = null;
+        
+        let previewX = 0, canDrop = true;
+        let gameState = 'START'; // START, PLAYING, GAMEOVER_ANIMATING, GAMEOVER
+        let particles = [], shockwaves = [], walls = [], shakeFrames = 0;
+
+        let hp = 100;
+        const MAX_HP = 100;
+        const DEADLINE_Y = 130;
+
+        // --- 오디오 ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'drop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'merge') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'item_merge') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1500, audioCtx.currentTime + 0.1);
+                osc.frequency.linearRampToValueAtTime(300, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'stage_clear') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(554.37, audioCtx.currentTime + 0.1);
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.2);
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.6);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+            } else if (type === 'gameover') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 1.2);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 1.2);
+            }
+        }
+
+        // --- 초기화 ---
+        function init() {
+            updateDimensions();
+
+            engine = Engine.create({ enableSleeping: true });
+            world = engine.world;
+            world.gravity.y = 1.0; 
+            
+            engine.positionIterations = 8;
+            engine.velocityIterations = 6;
+
+            createWalls();
+            bindEvents();
+            requestAnimationFrame(renderLoop);
+        }
+
+        function updateDimensions() {
+            const rect = container.getBoundingClientRect();
+            width = rect.width;
+            height = rect.height;
+            canvas.width = width;
+            canvas.height = height;
+            previewX = width / 2;
+        }
+
+        function createWalls() {
+            const wallOptions = { isStatic: true, render: { visible: false }, friction: 0.5 };
+            const floor = Bodies.rectangle(width / 2, height + 100, width * 3, 200, wallOptions);
+            const leftWall = Bodies.rectangle(-100, height / 2, 200, height * 3, wallOptions);
+            const rightWall = Bodies.rectangle(width + 100, height / 2, 200, height * 3, wallOptions);
+            walls = [floor, leftWall, rightWall];
+            Composite.add(world, walls);
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            
+            // 붉은색 피격 이펙트가 남아있는 현상 방지를 위해 기본 네온 색상으로 명시적 초기화
+            container.style.boxShadow = '0 0 40px rgba(69, 243, 255, 0.1)';
+            
+            const allBodies = Composite.allBodies(world);
+            const bodiesToRemove = allBodies.filter(b => !b.isStatic);
+            Composite.remove(world, bodiesToRemove);
+            
+            particles = []; shockwaves = []; shakeFrames = 0;
+            score = 0; displayScore = 0; stage = 1; targetScore = 2500;
+            hp = MAX_HP;
+            
+            updateUI(); updateHPUI();
+            
+            if (runner) Runner.stop(runner);
+            runner = Runner.create();
+            Runner.run(runner, engine);
+
+            generateNextFruit(true);
+            prepareNextFruit();
+            gameState = 'PLAYING';
+            canDrop = true;
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // 게임 오버 폭발 연출 함수
+        function triggerGameOverExplosion() {
+            gameState = 'GAMEOVER_ANIMATING';
+            canDrop = false;
+            playSound('gameover');
+            
+            // 화면 강하게 흔들기
+            shakeFrames = 50; 
+            
+            // 모든 과일을 깨워서 강한 속도로 날려버림
+            const allBodies = Composite.allBodies(world).filter(b => !b.isStatic && b.fruitType !== undefined);
+            allBodies.forEach(b => {
+                Sleeping.set(b, false);
+                Matter.Body.setVelocity(b, {
+                    x: (Math.random() - 0.5) * 50, 
+                    y: -30 - Math.random() * 40
+                });
+            });
+
+            // 1.5초 후 팝업 표시
+            setTimeout(() => {
+                showGameOverScreen();
+            }, 1500);
+        }
+
+        // 실제 팝업 및 엔진 정지
+        function showGameOverScreen() {
+            gameState = 'GAMEOVER';
+            Runner.stop(runner);
+            document.getElementById('game-over-score').innerText = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function updateHPUI() {
+            const hpBar = document.getElementById('hp-bar');
+            const hpText = document.getElementById('hp-text');
+            const percent = Math.max(0, (hp / MAX_HP) * 100);
+            
+            hpBar.style.width = percent + '%';
+            hpText.innerText = `SYSTEM INTEGRITY: ${hp}%`;
+            
+            if (percent <= 30) hpBar.classList.add('hp-warning');
+            else hpBar.classList.remove('hp-warning');
+        }
+
+        function takeDamage(amount) {
+            if (gameState !== 'PLAYING') return;
+
+            hp -= amount;
+            if (hp < 0) hp = 0;
+            updateHPUI();
+            
+            container.style.boxShadow = 'inset 0 0 50px rgba(255, 42, 122, 0.5)';
+            setTimeout(() => {
+                if (gameState === 'PLAYING') container.style.boxShadow = '0 0 40px rgba(69, 243, 255, 0.1)';
+            }, 200);
+
+            if (hp <= 0) {
+                triggerGameOverExplosion();
+            }
+        }
+        
+        function healHP(amount) {
+            hp += amount;
+            if (hp > MAX_HP) hp = MAX_HP;
+            updateHPUI();
+            
+            container.style.boxShadow = 'inset 0 0 50px rgba(0, 255, 204, 0.5)';
+            setTimeout(() => {
+                if (gameState === 'PLAYING') container.style.boxShadow = '0 0 40px rgba(69, 243, 255, 0.1)';
+            }, 200);
+        }
+
+        function generateNextFruit(isFirst = false) {
+            nextFruitIndex = Math.floor(Math.random() * 4);
+            nextItemType = null;
+
+            if (!isFirst) {
+                let itemChance = 0.05 + (stage * 0.03);
+                if (Math.random() < itemChance) {
+                    nextItemType = Math.floor(Math.random() * 7) + 1;
+                }
+            }
+        }
+
+        function prepareNextFruit() {
+            currentFruitIndex = nextFruitIndex;
+            currentItemType = nextItemType;
+            generateNextFruit();
+            drawNextFruit();
+        }
+
+        function updateUI() {
+            document.getElementById('stage-display').innerText = stage;
+            document.getElementById('target-display').innerText = `TARGET: ${targetScore}`;
+        }
+
+        function bindEvents() {
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', startGame);
+
+            const handleMove = (e) => {
+                if (gameState !== 'PLAYING' || !canDrop) return;
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const rect = canvas.getBoundingClientRect();
+                let x = clientX - rect.left;
+                const radius = FRUITS[currentFruitIndex].radius;
+                previewX = Math.max(radius + 10, Math.min(x, width - radius - 10));
+            };
+
+            const handleDrop = (e) => {
+                if (gameState !== 'PLAYING' || !canDrop) return;
+                handleMove(e);
+                
+                canDrop = false;
+                dropFruit(previewX, 50, currentFruitIndex, currentItemType);
+                playSound('drop');
+                
+                setTimeout(() => {
+                    if (gameState === 'PLAYING') {
+                        prepareNextFruit();
+                        canDrop = true;
+                    }
+                }, 400); 
+            };
+
+            container.addEventListener('mousemove', handleMove);
+            container.addEventListener('touchmove', handleMove);
+            container.addEventListener('mousedown', handleDrop);
+            container.addEventListener('touchend', handleDrop);
+
+            Events.on(engine, 'collisionStart', (event) => {
+                const pairs = event.pairs;
+                for (let i = 0; i < pairs.length; i++) {
+                    const bodyA = pairs[i].bodyA;
+                    const bodyB = pairs[i].bodyB;
+
+                    if (bodyA.fruitType !== undefined && bodyB.fruitType !== undefined) {
+                        if (bodyA.fruitType === bodyB.fruitType && !bodyA.isMerging && !bodyB.isMerging) {
+                            bodyA.isMerging = true;
+                            bodyB.isMerging = true;
+
+                            const type = bodyA.fruitType;
+                            if (type < FRUITS.length - 1) {
+                                const nextType = type + 1;
+                                const midX = (bodyA.position.x + bodyB.position.x) / 2;
+                                const midY = (bodyA.position.y + bodyB.position.y) / 2;
+
+                                const activeItemType = bodyA.itemType || bodyB.itemType || null;
+
+                                Composite.remove(world, [bodyA, bodyB]);
+                                score += FRUITS[type].score;
+                                checkStageClear();
+
+                                shockwaves.push({ x: midX, y: midY, radius: FRUITS[type].radius, maxRadius: 150, alpha: 1, color: FRUITS[nextType].color });
+
+                                if (activeItemType) {
+                                    playSound('item_merge');
+                                    executeItemEffect(activeItemType, midX, midY, nextType);
+                                    createParticles(midX, midY, '#ffffff', 20); 
+                                } else {
+                                    playSound('merge');
+                                    createFruit(midX, midY, nextType);
+                                    createParticles(midX, midY, FRUITS[nextType].color, 10);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            setInterval(() => {
+                if (gameState !== 'PLAYING') return;
+                const bodies = Composite.allBodies(world);
+                let overDeadline = false;
+
+                for (let body of bodies) {
+                    if (body.fruitType !== undefined && !body.isStatic) {
+                        if (body.justDropped && (Date.now() - body.dropTime > 2000)) {
+                            body.justDropped = false;
+                        }
+                        if (body.position.y > DEADLINE_Y + 50) {
+                            body.justDropped = false;
+                        }
+                        if (body.bounds.min.y < DEADLINE_Y && body.velocity.y > -0.5 && body.velocity.y < 0.5) {
+                            if (!body.justDropped) {
+                                overDeadline = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (overDeadline) takeDamage(10); 
+            }, 1000);
+        }
+
+        function checkStageClear() {
+            if (score >= targetScore) {
+                const bonus = stage * 1000;
+                score += bonus;
+                stage++;
+                targetScore = Math.floor(targetScore * 1.5 + 2000);
+                
+                playSound('stage_clear');
+                updateUI();
+                
+                const popup = document.getElementById('stage-clear-popup');
+                document.getElementById('stage-bonus-display').innerText = `+${bonus} BONUS`;
+                popup.classList.add('active');
+                
+                nextItemType = Math.floor(Math.random() * 7) + 1;
+                drawNextFruit();
+
+                setTimeout(() => { popup.classList.remove('active'); }, 2000);
+            }
+        }
+
+        function createFruit(x, y, type, itemType = null) {
+            const fruitDef = FRUITS[type];
+            const body = Bodies.circle(x, y, fruitDef.radius, {
+                restitution: 0.15, 
+                friction: 0.2,     
+                density: 0.001,    
+                fruitType: type,
+                itemType: itemType
+            });
+            body.justDropped = true;
+            body.dropTime = Date.now();
+            Composite.add(world, body);
+            return body;
+        }
+
+        function dropFruit(x, y, type, itemType) {
+            createFruit(x, y, type, itemType);
+        }
+
+        function executeItemEffect(effectId, x, y, nextType) {
+            const allBodies = Composite.allBodies(world).filter(b => b.fruitType !== undefined && !b.isStatic);
+
+            switch(effectId) {
+                case 1: 
+                    let closest = null, minD = Infinity;
+                    allBodies.forEach(b => {
+                        let d = Math.hypot(b.position.x - x, b.position.y - y);
+                        if(d > 10 && d < minD) { minD = d; closest = b; } 
+                    });
+                    createFruit(x, y, closest ? closest.fruitType : nextType);
+                    break;
+                case 2: 
+                    let count = Math.floor(Math.random() * 2) + 3;
+                    for(let i=0; i<count; i++) {
+                        let rType = Math.floor(Math.random() * Math.max(1, nextType - 1));
+                        createFruit(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*30, rType);
+                    }
+                    break;
+                case 3: 
+                    let nearby = allBodies.filter(b => Math.hypot(b.position.x - x, b.position.y - y) < 200);
+                    let posArray = nearby.map(b => ({x: b.position.x, y: b.position.y}));
+                    posArray.sort(() => Math.random() - 0.5);
+                    nearby.forEach((b, idx) => {
+                        Sleeping.set(b, false); 
+                        Matter.Body.setPosition(b, posArray[idx]);
+                    });
+                    createFruit(x, y, nextType);
+                    break;
+                case 4: 
+                    shakeFrames = 30; 
+                    allBodies.forEach(b => {
+                        Sleeping.set(b, false); 
+                        Matter.Body.setVelocity(b, {x: (Math.random() - 0.5) * 15, y: -10 - Math.random() * 15});
+                    });
+                    createFruit(x, y, nextType);
+                    break;
+                case 5: 
+                    let sames = allBodies.filter(b => b.fruitType === (nextType - 1));
+                    sames.sort((a,b) => b.position.y - a.position.y); 
+                    if (sames.length > 0) {
+                        Composite.remove(world, sames[0]);
+                        createParticles(sames[0].position.x, sames[0].position.y, '#ffffff', 15);
+                        shockwaves.push({ x: sames[0].position.x, y: sames[0].position.y, radius: 10, maxRadius: 100, alpha: 1, color: '#ff2a7a' });
+                    }
+                    createFruit(x, y, nextType);
+                    break;
+                case 6: 
+                    healHP(30);
+                    createFruit(x, y, nextType);
+                    break;
+                case 7: 
+                    takeDamage(30);
+                    createFruit(x, y, nextType);
+                    break;
+            }
+        }
+
+        function createParticles(x, y, color, amount = 10) {
+            for (let i = 0; i < amount; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15,
+                    life: 1, color: color
+                });
+            }
+        }
+
+        function drawNextFruit() {
+            nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+            const def = FRUITS[nextFruitIndex];
+            const cx = nextCanvas.width / 2;
+            const cy = nextCanvas.height / 2;
+            
+            nextCtx.beginPath();
+            nextCtx.arc(cx, cy, 18, 0, 2 * Math.PI);
+            nextCtx.fillStyle = def.color + '40';
+            nextCtx.fill();
+            
+            if (nextItemType) {
+                nextCtx.lineWidth = 2;
+                // 해골(7번) 아이템이면 붉은색 테두리
+                nextCtx.strokeStyle = (nextItemType === 7) ? '#ff0055' : '#fff';
+                nextCtx.setLineDash([4, 4]);
+            } else {
+                nextCtx.lineWidth = 2;
+                nextCtx.strokeStyle = def.color;
+                nextCtx.setLineDash([]);
+            }
+            nextCtx.shadowBlur = 10;
+            nextCtx.shadowColor = def.color;
+            nextCtx.stroke();
+            nextCtx.setLineDash([]);
+            
+            nextCtx.shadowBlur = 0;
+            nextCtx.font = "20px Arial";
+            nextCtx.textAlign = "center";
+            nextCtx.textBaseline = "middle";
+            nextCtx.fillStyle = '#fff';
+            
+            if (nextItemType) {
+                const icon = ITEM_EFFECTS.find(i => i.id === nextItemType).icon;
+                nextCtx.font = "12px Arial";
+                nextCtx.fillText(icon, cx + 12, cy - 12);
+                nextCtx.font = "18px Arial"; 
+            }
+            nextCtx.fillText(def.emoji, cx, cy + 2);
+        }
+
+        function renderLoop() {
+            if (displayScore < score) {
+                displayScore += Math.ceil((score - displayScore) / 10);
+                document.getElementById('score-display').innerText = displayScore;
+            }
+
+            ctx.save();
+            if (shakeFrames > 0) {
+                const dx = (Math.random() - 0.5) * 15;
+                const dy = (Math.random() - 0.5) * 15;
+                ctx.translate(dx, dy);
+                shakeFrames--;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            // 게임 오버 애니메이션 중에도 데드라인과 궤적은 숨기고 객체만 그림
+            if (gameState === 'PLAYING') {
+                ctx.beginPath();
+                ctx.moveTo(0, DEADLINE_Y);
+                ctx.lineTo(width, DEADLINE_Y);
+                
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = 'rgba(255, 42, 122, 0.2)';
+                ctx.stroke();
+                
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255, 42, 122, 0.8)';
+                ctx.setLineDash([8, 8]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                if (canDrop) {
+                    const def = FRUITS[currentFruitIndex];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(previewX, 50);
+                    ctx.lineTo(previewX, height);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.arc(previewX, 50, def.radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = def.color + '20';
+                    ctx.fill();
+                    
+                    if (currentItemType) {
+                        ctx.lineWidth = 2;
+                        // 해골 아이템 프리뷰 궤적도 붉은색 반영
+                        ctx.strokeStyle = (currentItemType === 7) ? '#ff0055' : '#fff';
+                        ctx.setLineDash([5, 5]);
+                    } else {
+                        ctx.lineWidth = 6;
+                        ctx.strokeStyle = def.color + '30';
+                        ctx.stroke();
+                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = def.color + '80';
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    ctx.font = `${def.radius * 1.2}px Arial`;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillText(def.emoji, previewX + 2, 54);
+                    ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
+                    ctx.fillText(def.emoji, previewX, 52);
+
+                    if (currentItemType) {
+                        const icon = ITEM_EFFECTS.find(i => i.id === currentItemType).icon;
+                        ctx.font = `${def.radius * 0.7}px Arial`;
+                        ctx.fillText(icon, previewX + def.radius*0.6, 50 - def.radius*0.6);
+                    }
+                }
+            }
+
+            const bodies = Composite.allBodies(world);
+            for (let body of bodies) {
+                if (body.fruitType !== undefined) {
+                    const def = FRUITS[body.fruitType];
+                    const pos = body.position;
+                    const angle = body.angle;
+
+                    ctx.save();
+                    ctx.translate(pos.x, pos.y);
+                    ctx.rotate(angle);
+
+                    ctx.beginPath();
+                    ctx.arc(0, 0, def.radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = def.color + '30';
+                    ctx.fill();
+                    
+                    if (body.itemType) {
+                        ctx.rotate(Date.now() / 500); 
+                        ctx.setLineDash([10, 10]);
+                        const isBad = (body.itemType === 7); // 함정 판단
+                        
+                        ctx.lineWidth = 8;
+                        ctx.strokeStyle = isBad ? 'rgba(255, 0, 85, 0.3)' : 'rgba(255, 255, 255, 0.3)';
+                        ctx.stroke();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = isBad ? '#ff0055' : '#ffffff';
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    } else {
+                        ctx.lineWidth = 8;
+                        ctx.strokeStyle = def.color + '40';
+                        ctx.stroke();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = def.color;
+                        ctx.stroke();
+                    }
+                    ctx.restore(); 
+
+                    ctx.save();
+                    ctx.translate(pos.x, pos.y);
+                    ctx.rotate(angle * 0.5); 
+                    ctx.font = `${def.radius * 1.2}px Arial`;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillText(def.emoji, 2, 4); 
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(def.emoji, 0, 2);
+
+                    if (body.itemType) {
+                        const icon = ITEM_EFFECTS.find(i => i.id === body.itemType).icon;
+                        ctx.font = `${def.radius * 0.6}px Arial`;
+                        
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.fillText(icon, def.radius*0.6 + 1, -def.radius*0.6 + 1);
+                        
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillText(icon, def.radius*0.6, -def.radius*0.6);
+                    }
+                    ctx.restore();
+                }
+            }
+
+            for (let i = shockwaves.length - 1; i >= 0; i--) {
+                let sw = shockwaves[i];
+                sw.radius += 8;
+                sw.alpha -= 0.04;
+                if (sw.alpha <= 0) {
+                    shockwaves.splice(i, 1);
+                    continue;
+                }
+                ctx.beginPath();
+                ctx.arc(sw.x, sw.y, sw.radius, 0, 2 * Math.PI);
+                
+                ctx.lineWidth = 10;
+                ctx.strokeStyle = `${sw.color}${Math.floor(sw.alpha * 100).toString(16).padStart(2, '0')}`;
+                ctx.stroke();
+                
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = `${sw.color}${Math.floor(sw.alpha * 255).toString(16).padStart(2, '0')}`;
+                ctx.stroke();
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.life * 4, 0, 2 * Math.PI);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                
+                ctx.lineWidth = p.life * 2;
+                ctx.strokeStyle = p.color + '80';
+                ctx.stroke();
+            }
+
+            ctx.restore(); 
+            requestAnimationFrame(renderLoop);
+        }
+
+        window.addEventListener('resize', () => {
+            updateDimensions();
+            if (walls.length > 0) {
+                Composite.remove(world, walls);
+                createWalls();
+            }
+        });
+
+        window.onload = () => {
+            setTimeout(init, 50);
+        };
+
+    </script>
+</body>
+</html>
