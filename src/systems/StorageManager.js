@@ -19,7 +19,7 @@ export class StorageManager {
      */
     loadAll() {
         try {
-            const profile = this.get('profile') || this.createDefaultProfile();
+            const profile = this.normalizeProfile(this.get('profile'));
             const games = this.get('games') || {};
             const achievements = this.get('achievements') || {};
             const settings = this.get('settings') || this.createDefaultSettings();
@@ -28,7 +28,7 @@ export class StorageManager {
         } catch (e) {
             console.warn('Failed to load storage:', e);
             return {
-                profile: this.createDefaultProfile(),
+                profile: this.normalizeProfile(),
                 games: {},
                 achievements: {},
                 settings: this.createDefaultSettings()
@@ -44,10 +44,24 @@ export class StorageManager {
             id: this.generateId(),
             nickname: 'Player',
             avatar: 'default',
+            cloudUid: null,
+            email: '',
+            provider: 'guest',
             createdAt: Date.now(),
             totalPlayTime: 0,
             totalGamesPlayed: 0,
             totalScore: 0
+        };
+    }
+
+    /**
+     * Normalize profile for backward compatibility
+     */
+    normalizeProfile(profile = {}) {
+        const defaults = this.createDefaultProfile();
+        return {
+            ...defaults,
+            ...(profile || {})
         };
     }
 
@@ -121,7 +135,7 @@ export class StorageManager {
      * Update user profile
      */
     updateProfile(updates) {
-        this.data.profile = { ...this.data.profile, ...updates };
+        this.data.profile = this.normalizeProfile({ ...this.data.profile, ...updates });
         this.set('profile', this.data.profile);
         return this.data.profile;
     }
@@ -158,6 +172,7 @@ export class StorageManager {
         return {
             gameId,
             highScore: 0,
+            bestRank: null,
             totalScore: 0,
             playCount: 0,
             bestLevel: 1,
@@ -213,6 +228,25 @@ export class StorageManager {
 
         this.set('games', this.data.games);
         return next;
+    }
+
+    /**
+     * Update best rank (lower is better)
+     */
+    updateBestRank(gameId, rank) {
+        const safeRank = Math.floor(Number(rank));
+        if (!Number.isFinite(safeRank) || safeRank <= 0) {
+            return this.getGameData(gameId);
+        }
+
+        const gameData = this.getGameData(gameId);
+        const currentBestRank = Math.floor(Number(gameData.bestRank));
+        const hasCurrentBest = Number.isFinite(currentBestRank) && currentBestRank > 0;
+        if (hasCurrentBest && currentBestRank <= safeRank) {
+            return gameData;
+        }
+
+        return this.updateGameData(gameId, { bestRank: safeRank });
     }
 
     /**

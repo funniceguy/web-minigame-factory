@@ -4,6 +4,8 @@
 import { storage } from '../systems/StorageManager.js';
 import { ShareManager } from './ShareManager.js';
 import { AchievementSystem } from './AchievementSystem.js';
+import { cloudAuth } from '../services/CloudAuthService.js';
+import { leaderboardService } from '../services/LeaderboardService.js';
 
 const GAME_CARD_PRESETS = {
     'neon-block': {
@@ -50,6 +52,8 @@ const GAME_CARD_PRESETS = {
     }
 };
 
+const LEADERBOARD_REFRESH_INTERVAL_MS = 30000;
+
 export class GameHub {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
@@ -63,11 +67,31 @@ export class GameHub {
         this.shareManager = new ShareManager();
         this.achievementSystem = new AchievementSystem();
 
+        this.authState = {
+            enabled: false,
+            isSignedIn: false,
+            user: null
+        };
+        this.activeTab = 'play';
+        this.leaderboardState = {
+            enabled: false,
+            overallTop: [],
+            myOverall: null,
+            games: {},
+            loading: false,
+            error: null,
+            lastUpdatedAt: null
+        };
+        this.refreshLeaderboardPromise = null;
+        this.refreshLeaderboardTimer = null;
+        this.unsubscribeAuthListener = null;
+
         this.eventsBound = false;
         this.discoveryStarted = false;
         this.runtimeBasePath = this.resolveRuntimeBasePath();
         this.handleContainerClick = this.handleContainerClick.bind(this);
         this.handleWindowMessage = this.handleWindowMessage.bind(this);
+        this.handleAuthStateChange = this.handleAuthStateChange.bind(this);
 
         this.init();
     }
@@ -76,6 +100,7 @@ export class GameHub {
         this.render();
         this.setupEventListeners();
         this.discoverGames();
+        this.bootstrapCloud();
     }
 
     async discoverGames() {
@@ -101,6 +126,7 @@ export class GameHub {
                     discoveredConfigs.map((game) => [game.id, game])
                 );
                 this.render();
+                this.refreshLeaderboards({ force: true });
             }
         } catch (error) {
             console.warn('Failed to discover games:', error);
@@ -655,6 +681,230 @@ export class GameHub {
         };
     }
 
+    async bootstrapCloud() {
+        try {
+            await cloudAuth.init();
+            this.authState = cloudAuth.getState();
+            this.unsubscribeAuthListener = cloudAuth.onChange(this.handleAuthStateChange);
+
+            if (this.authState.isSignedIn) {
+                this.syncProfileWithAuthUser(this.authState.user);
+                await leaderboardService.syncFromLocal();
+            }
+        } catch (error) {
+            console.warn('Cloud bootstrap failed:', error);
+        }
+
+        this.startLeaderboardAutoRefresh();
+        this.refreshLeaderboards({ force: true });
+        this.render();
+    }
+
+    handleAuthStateChange(state) {
+        this.authState = state;
+        this.syncProfileWithAuthUser(state.user);
+
+        if (state.isSignedIn) {
+            leaderboardService.syncFromLocal()
+                .then(() => {
+                    this.refreshLeaderboards({ force: true });
+                })
+                .catch((error) => {
+                    console.warn('Failed to sync local scores after sign-in:', error);
+                });
+        }
+
+        this.refreshLeaderboards({ force: true });
+        this.render();
+    }
+
+    syncProfileWithAuthUser(user) {
+        const profile = storage.getProfile();
+
+        if (!user) {
+            if (profile.cloudUid || profile.provider !== 'guest') {
+                storage.updateProfile({
+                    cloudUid: null,
+                    email: '',
+                    provider: 'guest'
+                });
+            }
+            return;
+        }
+
+        const updates = {
+            cloudUid: user.uid,
+            email: user.email || '',
+            provider: user.providerId || 'oauth'
+        };
+
+        const isDifferentAccount = Boolean(profile.cloudUid && profile.cloudUid !== user.uid);
+        if ((isDifferentAccount || !profile.nickname || profile.nickname === 'Player') && user.displayName) {
+            updates.nickname = user.displayName;
+        }
+
+        storage.updateProfile(updates);
+    }
+
+    async handleLoginRequest(providerType) {
+        try {
+            if (providerType === 'apple') {
+                const result = await cloudAuth.signInWithApple();
+                if (result?.redirect) return;
+            } else {
+                const result = await cloudAuth.signInWithGoogle();
+                if (result?.redirect) return;
+            }
+        } catch (error) {
+            console.warn('Sign-in failed:', error);
+            window.alert(`로그인에 실패했습니다.\n${error?.message || error}`);
+        }
+    }
+
+    async handleLogoutRequest() {
+        try {
+            await cloudAuth.signOut();
+        } catch (error) {
+            console.warn('Sign-out failed:', error);
+            window.alert(`로그아웃에 실패했습니다.\n${error?.message || error}`);
+        }
+    }
+
+    startLeaderboardAutoRefresh() {
+        if (this.refreshLeaderboardTimer) return;
+        this.refreshLeaderboardTimer = window.setInterval(() => {
+            this.refreshLeaderboards();
+        }, LEADERBOARD_REFRESH_INTERVAL_MS);
+    }
+
+    stopLeaderboardAutoRefresh() {
+        if (!this.refreshLeaderboardTimer) return;
+        window.clearInterval(this.refreshLeaderboardTimer);
+        this.refreshLeaderboardTimer = null;
+    }
+
+    getLocalOverallHighScoreTotal() {
+        const gameStats = storage.getAllGameStats() || {};
+        return Object.values(gameStats).reduce((total, gameData) => {
+            return total + Number(gameData?.highScore || 0);
+        }, 0);
+    }
+
+    applyRankingSnapshotToLocal(snapshotGames = {}) {
+        if (!snapshotGames || typeof snapshotGames !== 'object') return;
+
+        Object.entries(snapshotGames).forEach(([gameId, rankingData]) => {
+            const rank = Number(rankingData?.my?.rank);
+            if (!Number.isFinite(rank) || rank <= 0) return;
+            storage.updateBestRank(gameId, rank);
+        });
+    }
+
+    async refreshLeaderboards(options = {}) {
+        const { force = false } = options;
+        if (!force && !this.authState.enabled && !this.leaderboardState.enabled) {
+            return null;
+        }
+
+        if (this.refreshLeaderboardPromise && !force) {
+            return this.refreshLeaderboardPromise;
+        }
+
+        const runRefresh = async () => {
+            this.leaderboardState.loading = true;
+            this.leaderboardState.error = null;
+            this.render();
+
+            try {
+                const snapshot = await leaderboardService.getAllGameLeaderboardSnapshot({
+                    gameIds: this.games.map((game) => game.id),
+                    topLimit: 5
+                });
+                this.applyRankingSnapshotToLocal(snapshot.games);
+
+                this.leaderboardState = {
+                    ...this.leaderboardState,
+                    enabled: Boolean(snapshot.enabled),
+                    overallTop: snapshot.overallTop || [],
+                    myOverall: snapshot.myOverall || null,
+                    games: snapshot.games || {},
+                    loading: false,
+                    error: snapshot.enabled ? null : (snapshot.reason || 'disabled'),
+                    lastUpdatedAt: Date.now()
+                };
+            } catch (error) {
+                console.warn('Failed to refresh leaderboards:', error);
+                this.leaderboardState = {
+                    ...this.leaderboardState,
+                    loading: false,
+                    error: error?.message || String(error)
+                };
+            }
+
+            this.render();
+        };
+
+        this.refreshLeaderboardPromise = runRefresh()
+            .finally(() => {
+                this.refreshLeaderboardPromise = null;
+            });
+
+        return this.refreshLeaderboardPromise;
+    }
+
+    async syncLeaderboardAfterSession(gameId) {
+        if (!this.authState.isSignedIn) return;
+
+        try {
+            await leaderboardService.syncFromLocal(gameId);
+            this.refreshLeaderboards({ force: true });
+        } catch (error) {
+            console.warn('Failed to sync leaderboard after session:', error);
+        }
+    }
+
+    formatLeaderboardRank(rank) {
+        if (!Number.isFinite(rank) || rank <= 0) return '-';
+        return `${rank}위`;
+    }
+
+    renderLeaderboardRows(entries) {
+        if (!entries || entries.length === 0) {
+            return '<li class="leaderboard-empty">기록이 아직 없습니다.</li>';
+        }
+
+        return entries.map((entry) => `
+            <li class="leaderboard-row">
+                <span class="leaderboard-rank">${entry.rank}</span>
+                <span class="leaderboard-name">${entry.nickname || 'Player'}</span>
+                <span class="leaderboard-score">${this.formatNumber(entry.score || 0)}</span>
+            </li>
+        `).join('');
+    }
+
+    renderCloudAuthControl() {
+        if (!this.authState.enabled) {
+            return '<div class="leaderboard-auth-note">클라우드 인증 비활성화 상태입니다. `src/config/cloud-config.js`를 설정하세요.</div>';
+        }
+
+        if (this.authState.isSignedIn) {
+            const user = this.authState.user || {};
+            return `
+                <div class="leaderboard-auth-user">
+                    <span class="leaderboard-auth-text">연동됨: ${user.displayName || 'Player'}${user.email ? ` (${user.email})` : ''}</span>
+                    <button class="glass-btn leaderboard-auth-btn" data-action="logout-cloud">로그아웃</button>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="leaderboard-auth-actions">
+                <button class="glass-btn leaderboard-auth-btn" data-action="login-google">Google 로그인</button>
+                <button class="glass-btn leaderboard-auth-btn" data-action="login-apple">Apple 로그인</button>
+            </div>
+        `;
+    }
+
     getDashboardTotals() {
         const profile = storage.getProfile();
         const totalPlayCount = storage.getTotalPlayCount();
@@ -671,9 +921,135 @@ export class GameHub {
         };
     }
 
+    getGameLeaderboardSnapshot(gameId) {
+        if (!gameId) return { top: [], my: null };
+        return this.leaderboardState.games?.[gameId] || { top: [], my: null };
+    }
+
+    getGameLeaderboardSummary(gameId) {
+        const gameSnapshot = this.getGameLeaderboardSnapshot(gameId);
+        const gameData = storage.getGameData(gameId);
+        const localHighScore = Number(gameData?.highScore || 0);
+        const topScore = Number(gameSnapshot?.top?.[0]?.score || 0);
+        const myRank = Number(gameSnapshot?.my?.rank);
+        const safeMyRank = Number.isFinite(myRank) && myRank > 0 ? Math.floor(myRank) : null;
+        const storedBestRank = Number(gameData?.bestRank);
+        const safeStoredBestRank = Number.isFinite(storedBestRank) && storedBestRank > 0
+            ? Math.floor(storedBestRank)
+            : null;
+        const bestRank = safeMyRank && safeStoredBestRank
+            ? Math.min(safeMyRank, safeStoredBestRank)
+            : (safeMyRank || safeStoredBestRank || null);
+        const myScore = Number(gameSnapshot?.my?.score ?? localHighScore);
+
+        return {
+            top: Array.isArray(gameSnapshot?.top) ? gameSnapshot.top : [],
+            topScore,
+            myRank: safeMyRank,
+            bestRank,
+            myScore
+        };
+    }
+
+    renderPlayTab() {
+        return `
+            <section class="tab-panel play-tab">
+                <section class="game-gallery">
+                    <h2 class="section-title font-display"><span class="neon-text-cyan">🎮</span>게임 플레이</h2>
+                    <div class="game-grid stagger-children">${this.renderGameCards()}</div>
+                </section>
+            </section>
+        `;
+    }
+
+    renderRankingGameCards() {
+        if (!this.games.length) {
+            return '<div class="leaderboard-auth-note">표시할 게임이 없습니다.</div>';
+        }
+
+        return this.games.map((game) => {
+            const ranking = this.getGameLeaderboardSummary(game.id);
+            const myRankDisplay = this.formatLeaderboardRank(ranking.myRank);
+            const bestRankDisplay = this.formatLeaderboardRank(ranking.bestRank);
+            const myScoreDisplay = ranking.myScore > 0 ? this.formatNumber(ranking.myScore) : '-';
+            const topScoreDisplay = ranking.topScore > 0 ? this.formatNumber(ranking.topScore) : '-';
+
+            return `
+                <article class="ranking-game-card glass-card" data-game-id="${game.id}" style="--card-color:${game.color};">
+                    <div class="ranking-game-header">
+                        <span class="ranking-game-icon">${game.icon}</span>
+                        <div class="ranking-game-title-wrap">
+                            <h3 class="ranking-game-title font-display">${game.name}</h3>
+                            <p class="ranking-game-desc">${game.description}</p>
+                        </div>
+                    </div>
+                    <div class="ranking-game-metrics">
+                        <span>내 랭킹 <strong>${myRankDisplay}</strong></span>
+                        <span>최고 랭킹 <strong>${bestRankDisplay}</strong></span>
+                        <span>내 점수 <strong>${myScoreDisplay}</strong></span>
+                        <span>1위 점수 <strong>${topScoreDisplay}</strong></span>
+                    </div>
+                    <ol class="leaderboard-list ranking-mini-list">${this.renderLeaderboardRows(ranking.top.slice(0, 3))}</ol>
+                    <div class="ranking-card-actions">
+                        <button class="neon-btn" data-action="play">바로 플레이</button>
+                        <button class="glass-btn" data-action="achievements">업적</button>
+                        <button class="glass-btn" data-action="share">공유</button>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    renderRankingTab(leaderboardStatus, overallScoreDisplay, overallRankDisplay) {
+        return `
+            <section class="tab-panel ranking-tab">
+                <section class="leaderboard-section glass-panel">
+                    <div class="leaderboard-header">
+                        <h2 class="section-title font-display"><span class="neon-text-yellow">🏆</span>랭킹</h2>
+                        <button class="glass-btn" data-action="refresh-leaderboard">새로고침</button>
+                    </div>
+                    <div class="leaderboard-subtext">${leaderboardStatus}</div>
+                    ${this.renderCloudAuthControl()}
+                    ${this.leaderboardState.error ? `<div class="leaderboard-error">${this.leaderboardState.error}</div>` : ''}
+
+                    <div class="ranking-overview">
+                        <article class="leaderboard-card glass-card">
+                            <h3 class="leaderboard-title">전체 랭킹</h3>
+                            <ol class="leaderboard-list">${this.renderLeaderboardRows(this.leaderboardState.overallTop)}</ol>
+                        </article>
+                        <article class="my-score-item glass-card">
+                            <span class="my-score-label">내 전체 랭킹 점수</span>
+                            <span class="my-score-value neon-text-yellow">${this.formatNumber(overallScoreDisplay)}</span>
+                            <span class="my-score-rank">${overallRankDisplay}</span>
+                        </article>
+                    </div>
+
+                    <div class="ranking-game-grid">
+                        ${this.renderRankingGameCards()}
+                    </div>
+                </section>
+            </section>
+        `;
+    }
+
     render() {
         const profile = storage.getProfile();
         const totals = this.getDashboardTotals();
+        const localOverallHighScore = this.getLocalOverallHighScoreTotal();
+        const myOverall = this.leaderboardState.myOverall;
+        const overallScoreDisplay = Number(myOverall?.score ?? localOverallHighScore);
+        const overallRankDisplay = this.formatLeaderboardRank(myOverall?.rank);
+        const lastUpdatedText = this.leaderboardState.lastUpdatedAt
+            ? new Date(this.leaderboardState.lastUpdatedAt).toLocaleTimeString('ko-KR', { hour12: false })
+            : '-';
+        const leaderboardStatus = this.leaderboardState.loading
+            ? '랭킹 갱신 중...'
+            : this.leaderboardState.enabled
+                ? `최근 갱신 ${lastUpdatedText}`
+                : '클라우드 랭킹 비활성화';
+        const activeTabContent = this.activeTab === 'ranking'
+            ? this.renderRankingTab(leaderboardStatus, overallScoreDisplay, overallRankDisplay)
+            : this.renderPlayTab();
 
         this.container.innerHTML = `
             <div class="hub-wrapper">
@@ -689,8 +1065,6 @@ export class GameHub {
                 </header>
 
                 <div class="stats-bar glass-card">
-                    <div class="stat-item"><span class="stat-value neon-text-cyan">${totals.totalPlayCount}</span><span class="stat-label">전체 플레이</span></div>
-                    <div class="stat-divider"></div>
                     <div class="stat-item"><span class="stat-value neon-text-pink">${totals.achievementUnlocked}/${totals.achievementTotal}</span><span class="stat-label">전체 업적</span></div>
                     <div class="stat-divider"></div>
                     <div class="stat-item"><span class="stat-value neon-text-yellow">${this.formatNumber(totals.totalScore)}</span><span class="stat-label">누적 점수</span></div>
@@ -698,10 +1072,24 @@ export class GameHub {
                     <div class="stat-item"><span class="stat-value neon-text-cyan">${totals.totalGames}</span><span class="stat-label">게임 수</span></div>
                 </div>
 
-                <section class="game-gallery">
-                    <h2 class="section-title font-display"><span class="neon-text-cyan">🎮</span>게임 선택</h2>
-                    <div class="game-grid stagger-children">${this.renderGameCards()}</div>
-                </section>
+                <nav class="hub-tabs glass-card">
+                    <button
+                        class="hub-tab-btn ${this.activeTab === 'play' ? 'active' : ''}"
+                        data-action="switch-tab"
+                        data-tab="play"
+                    >
+                        게임 플레이
+                    </button>
+                    <button
+                        class="hub-tab-btn ${this.activeTab === 'ranking' ? 'active' : ''}"
+                        data-action="switch-tab"
+                        data-tab="ranking"
+                    >
+                        랭킹
+                    </button>
+                </nav>
+
+                ${activeTabContent}
 
                 <div class="game-container" id="gameContainer" style="display:none;">
                     <div class="game-container-header">
@@ -722,7 +1110,8 @@ export class GameHub {
     renderGameCards() {
         return this.games.map((game) => {
             const gameData = storage.getGameData(game.id);
-            const progress = this.achievementSystem.getProgress(game.id);
+            const ranking = this.getGameLeaderboardSummary(game.id);
+            const bestRankText = this.formatLeaderboardRank(ranking.bestRank);
 
             return `
                 <article class="game-card glass-card" data-game-id="${game.id}" style="--card-color:${game.color};">
@@ -731,8 +1120,7 @@ export class GameHub {
                         <div class="game-icon">${game.icon}</div>
                         <h3 class="game-name font-display">${game.name}</h3>
                         <p class="game-desc">${game.description}</p>
-                        <div class="game-metrics"><span class="high-score">최고 ${this.formatNumber(gameData.highScore)}</span><span>플레이 ${gameData.playCount}회</span></div>
-                        <div class="game-metrics"><span class="achievement-count">업적 ${progress.unlocked}/${progress.total}</span></div>
+                        <div class="game-metrics"><span class="high-score">최고 점수 ${this.formatNumber(gameData.highScore)}</span><span class="ranking-count">최고 랭킹 ${bestRankText}</span></div>
                         <div class="game-actions game-actions-main">
                             <button class="neon-btn" data-action="play">플레이</button>
                         </div>
@@ -764,14 +1152,41 @@ export class GameHub {
             return;
         }
 
-        const gameCard = event.target.closest('.game-card');
+        const action = event.target.closest('[data-action]')?.dataset.action;
+        if (action === 'refresh-leaderboard') {
+            this.refreshLeaderboards({ force: true });
+            return;
+        }
+        if (action === 'login-google') {
+            this.handleLoginRequest('google');
+            return;
+        }
+        if (action === 'login-apple') {
+            this.handleLoginRequest('apple');
+            return;
+        }
+        if (action === 'logout-cloud') {
+            this.handleLogoutRequest();
+            return;
+        }
+        if (action === 'switch-tab') {
+            const tab = event.target.closest('[data-tab]')?.dataset.tab;
+            if (tab !== 'play' && tab !== 'ranking') return;
+            this.activeTab = tab;
+            this.render();
+            if (tab === 'ranking') {
+                this.refreshLeaderboards();
+            }
+            return;
+        }
+
+        const gameCard = event.target.closest('[data-game-id]');
         if (!gameCard) return;
 
         const gameId = gameCard.dataset.gameId;
         const game = this.gameRegistry.get(gameId);
         if (!game) return;
 
-        const action = event.target.closest('[data-action]')?.dataset.action;
         if (action === 'achievements') {
             this.showAchievementsPopup(gameId);
             return;
@@ -1035,9 +1450,11 @@ export class GameHub {
     recordCurrentSession(result = {}) {
         if (!this.currentSession || this.currentSession.recorded) return;
         const normalized = this.normalizeSessionResult(result);
-        storage.recordGameSession(this.currentSession.gameId, normalized);
-        this.achievementSystem.checkAndUnlock(this.currentSession.gameId);
+        const gameId = this.currentSession.gameId;
+        storage.recordGameSession(gameId, normalized);
+        this.achievementSystem.checkAndUnlock(gameId);
         this.currentSession.recorded = true;
+        this.syncLeaderboardAfterSession(gameId);
     }
 
     handleGameOver(gameId, result) {
@@ -1080,6 +1497,8 @@ export class GameHub {
 
         const gameData = storage.getGameData(gameId);
         const progress = this.achievementSystem.getProgress(gameId);
+        const ranking = this.getGameLeaderboardSummary(gameId);
+        const bestRankText = this.formatLeaderboardRank(ranking.bestRank);
 
         const modal = document.createElement('div');
         modal.className = 'hub-modal-overlay glass-overlay animate-fadeIn achievements-modal';
@@ -1090,7 +1509,8 @@ export class GameHub {
                     <button class="glass-btn popup-close" id="closeAchievementsBtn">닫기</button>
                 </div>
                 <div class="achievements-meta">
-                    <span>플레이 ${gameData.playCount}회</span>
+                    <span>최고 점수 ${this.formatNumber(gameData.highScore)}</span>
+                    <span>최고 랭킹 ${bestRankText}</span>
                     <span>달성 ${progress.unlocked}/${progress.total}</span>
                 </div>
                 ${this.achievementSystem.renderAchievementsList(gameId)}
@@ -1106,6 +1526,21 @@ export class GameHub {
         if (document.querySelector('.profile-modal')) return;
         const profile = storage.getProfile();
         const totals = this.getDashboardTotals();
+        const authUser = this.authState.user;
+
+        const authSection = !this.authState.enabled
+            ? '<div class="profile-auth-note">클라우드 인증 비활성화 상태입니다.</div>'
+            : this.authState.isSignedIn
+                ? `
+                    <div class="profile-auth-note">연동 계정: ${authUser?.displayName || 'Player'}${authUser?.email ? ` (${authUser.email})` : ''}</div>
+                    <button class="glass-btn" id="profileLogoutBtn">로그아웃</button>
+                `
+                : `
+                    <div class="profile-auth-actions">
+                        <button class="glass-btn" id="profileGoogleLoginBtn">Google 로그인</button>
+                        <button class="glass-btn" id="profileAppleLoginBtn">Apple 로그인</button>
+                    </div>
+                `;
 
         const modal = document.createElement('div');
         modal.className = 'hub-modal-overlay glass-overlay animate-fadeIn profile-modal';
@@ -1118,21 +1553,45 @@ export class GameHub {
                 <div style="font-size:3rem;text-align:center;">${this.getAvatarEmoji(profile.avatar)}</div>
                 <input type="text" class="glass-input" id="nicknameInput" value="${profile.nickname}" placeholder="닉네임" style="text-align:center;">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);">
-                    <div class="stat-item"><span class="stat-value neon-text-cyan">${totals.totalPlayCount}</span><span class="stat-label">전체 플레이</span></div>
+                    <div class="stat-item"><span class="stat-value neon-text-yellow">${this.formatNumber(totals.totalScore)}</span><span class="stat-label">누적 점수</span></div>
                     <div class="stat-item"><span class="stat-value neon-text-pink">${totals.achievementUnlocked}/${totals.achievementTotal}</span><span class="stat-label">업적</span></div>
                 </div>
+                ${authSection}
                 <button class="neon-btn" id="saveProfileBtn">저장</button>
             </div>
         `;
 
         document.body.appendChild(modal);
         modal.querySelector('#closeProfileBtn').onclick = () => modal.remove();
-        modal.querySelector('#saveProfileBtn').onclick = () => {
+        modal.querySelector('#saveProfileBtn').onclick = async () => {
             const nickname = modal.querySelector('#nicknameInput').value.trim() || 'Player';
             storage.setNickname(nickname);
+
+            if (this.authState.isSignedIn) {
+                try {
+                    await cloudAuth.updateDisplayName(nickname);
+                    await leaderboardService.syncFromLocal();
+                    this.refreshLeaderboards({ force: true });
+                } catch (error) {
+                    console.warn('Failed to sync profile nickname to leaderboard:', error);
+                }
+            }
+
             modal.remove();
             this.render();
         };
+        modal.querySelector('#profileGoogleLoginBtn')?.addEventListener('click', async () => {
+            await this.handleLoginRequest('google');
+            modal.remove();
+        });
+        modal.querySelector('#profileAppleLoginBtn')?.addEventListener('click', async () => {
+            await this.handleLoginRequest('apple');
+            modal.remove();
+        });
+        modal.querySelector('#profileLogoutBtn')?.addEventListener('click', async () => {
+            await this.handleLogoutRequest();
+            modal.remove();
+        });
         modal.onclick = (event) => { if (event.target === modal) modal.remove(); };
     }
 
@@ -1142,12 +1601,14 @@ export class GameHub {
 
         const gameData = storage.getGameData(gameId);
         const profile = storage.getProfile();
+        const ranking = this.getGameLeaderboardSummary(gameId);
         this.shareManager.showShareModal({
             gameId,
             gameName: game.name,
             playerName: profile.nickname,
             highScore: gameData.highScore,
-            playCount: gameData.playCount,
+            currentRank: ranking.myRank,
+            bestRank: ranking.bestRank,
             achievements: storage.getAchievements(gameId)
         });
     }
@@ -1172,6 +1633,46 @@ export class GameHub {
             .stat-label { font-size:var(--font-size-xs); color:var(--text-muted); }
             .stat-divider { width:1px; height:30px; background:rgba(255,255,255,0.1); }
             .section-title { font-size:var(--font-size-lg); margin-bottom:var(--space-4); display:flex; align-items:center; gap:var(--space-2); }
+            .hub-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px; margin-bottom:var(--space-4); }
+            .hub-tab-btn { border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.04); color:var(--text-secondary); border-radius:10px; min-height:38px; font-weight:600; cursor:pointer; transition:all var(--transition-fast); }
+            .hub-tab-btn:hover { border-color:rgba(255,255,255,0.28); color:var(--text-primary); }
+            .hub-tab-btn.active { color:var(--text-primary); border-color:rgba(0,242,255,0.5); background:linear-gradient(135deg, rgba(0,242,255,0.16), rgba(255,0,255,0.08)); box-shadow:0 0 16px rgba(0,242,255,0.2); }
+            .tab-panel { margin-bottom:var(--space-5); }
+            .leaderboard-section { margin-bottom:var(--space-6); padding:var(--space-4); display:flex; flex-direction:column; gap:var(--space-3); }
+            .leaderboard-header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); }
+            .leaderboard-subtext { font-size:var(--font-size-xs); color:var(--text-muted); }
+            .leaderboard-card { padding:var(--space-3); }
+            .leaderboard-title { font-size:var(--font-size-md); margin-bottom:var(--space-2); color:var(--text-primary); }
+            .leaderboard-list { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+            .leaderboard-row { display:grid; grid-template-columns:34px 1fr auto; align-items:center; gap:8px; font-size:0.82rem; color:var(--text-secondary); }
+            .leaderboard-rank { font-family:var(--font-display); color:var(--neon-cyan); }
+            .leaderboard-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-primary); }
+            .leaderboard-score { font-family:var(--font-display); color:var(--neon-yellow); }
+            .leaderboard-empty { color:var(--text-muted); font-size:0.78rem; padding:4px 0; }
+            .leaderboard-auth-actions { display:flex; gap:8px; flex-wrap:wrap; }
+            .leaderboard-auth-user { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+            .leaderboard-auth-text { font-size:0.8rem; color:var(--text-secondary); }
+            .leaderboard-auth-note { font-size:0.8rem; color:var(--text-muted); }
+            .leaderboard-auth-btn { white-space:nowrap; }
+            .leaderboard-error { font-size:0.78rem; color:var(--neon-pink); }
+            .ranking-overview { display:grid; gap:10px; grid-template-columns:1fr; }
+            @media (min-width:760px) { .ranking-overview { grid-template-columns:1.3fr 1fr; } }
+            .my-score-item { display:flex; flex-direction:column; gap:4px; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03); }
+            .my-score-label { font-size:0.76rem; color:var(--text-muted); }
+            .my-score-value { font-family:var(--font-display); font-size:1.1rem; }
+            .my-score-rank { font-size:0.8rem; color:var(--text-secondary); }
+            .ranking-game-grid { display:grid; gap:var(--space-3); grid-template-columns:1fr; }
+            @media (min-width:780px) { .ranking-game-grid { grid-template-columns:repeat(2, 1fr); } }
+            .ranking-game-card { padding:12px; border:1px solid rgba(255,255,255,0.14); background:linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); }
+            .ranking-game-header { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+            .ranking-game-icon { font-size:1.8rem; line-height:1; }
+            .ranking-game-title-wrap { min-width:0; }
+            .ranking-game-title { margin:0; color:var(--card-color, var(--neon-cyan)); font-size:1rem; }
+            .ranking-game-desc { margin:4px 0 0; font-size:0.75rem; color:var(--text-secondary); }
+            .ranking-game-metrics { display:flex; flex-wrap:wrap; gap:8px 12px; font-size:0.75rem; color:var(--text-secondary); margin-bottom:10px; }
+            .ranking-game-metrics strong { color:var(--text-primary); font-weight:700; }
+            .ranking-mini-list { margin-bottom:10px; }
+            .ranking-card-actions { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
             .game-grid { display:grid; grid-template-columns:1fr; gap:var(--space-4); }
             @media (min-width:500px) { .game-grid { grid-template-columns:repeat(2, 1fr); } }
             .game-card { position:relative; overflow:hidden; padding:var(--space-5); cursor:pointer; transition:all var(--transition-normal); animation:fadeInUp 0.4s ease forwards; opacity:0; }
@@ -1184,6 +1685,7 @@ export class GameHub {
             .game-metrics { display:flex; justify-content:space-between; gap:8px; font-size:0.75rem; margin-bottom:8px; color:var(--text-secondary); }
             .high-score { color: var(--neon-yellow); }
             .achievement-count { color: var(--neon-pink); }
+            .ranking-count { color: var(--neon-cyan); }
             .game-actions { display:grid; gap:8px; margin-top:8px; }
             .game-actions-main { grid-template-columns:1fr; }
             .game-actions-sub { grid-template-columns:1fr 1fr; }
@@ -1196,6 +1698,8 @@ export class GameHub {
             .popup-header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
             .popup-close { white-space:nowrap; }
             .profile-popup-content { width:min(360px,92vw); padding:var(--space-6); display:flex; flex-direction:column; gap:var(--space-4); }
+            .profile-auth-note { font-size:0.8rem; color:var(--text-secondary); text-align:center; }
+            .profile-auth-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
             .achievements-modal-content { padding:var(--space-5); display:flex; flex-direction:column; gap:var(--space-4); }
             .achievements-modal-content { scrollbar-width:thin; scrollbar-color:rgba(96,102,120,0.9) rgba(12,15,22,0.9); }
             .achievements-modal-content::-webkit-scrollbar { width:10px; height:10px; }

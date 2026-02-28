@@ -23,21 +23,14 @@ export class ShareManager {
     showShareModal(data) {
         const modal = this.createShareModal(data);
         document.body.appendChild(modal);
-
-        // Generate share image
-        this.generateShareImage(data).then(imageUrl => {
-            const preview = modal.querySelector('.share-preview');
-            if (preview && imageUrl) {
-                preview.src = imageUrl;
-                preview.style.display = 'block';
-            }
-        });
     }
 
     /**
      * Create share modal element
      */
     createShareModal(data) {
+        const currentRank = this.formatRankLabel(data.currentRank);
+        const bestRank = this.formatRankLabel(data.bestRank);
         const modal = document.createElement('div');
         modal.className = 'share-modal-overlay glass-overlay animate-fadeIn';
         modal.innerHTML = `
@@ -48,14 +41,6 @@ export class ShareManager {
                 </div>
                 
                 <div class="share-content">
-                    <div class="share-preview-container">
-                        <img class="share-preview" style="display: none;" alt="Share preview">
-                        <div class="share-loading">
-                            <div class="spinner animate-spin"></div>
-                            <span>Generating image...</span>
-                        </div>
-                    </div>
-                    
                     <div class="share-stats glass-card">
                         <div class="share-stat">
                             <span class="label">Game</span>
@@ -66,8 +51,12 @@ export class ShareManager {
                             <span class="value neon-text-yellow">${data.highScore.toLocaleString()}</span>
                         </div>
                         <div class="share-stat">
-                            <span class="label">Plays</span>
-                            <span class="value">${data.playCount}x</span>
+                            <span class="label">Current Rank</span>
+                            <span class="value neon-text-cyan">${currentRank}</span>
+                        </div>
+                        <div class="share-stat">
+                            <span class="label">Best Rank</span>
+                            <span class="value neon-text-pink">${bestRank}</span>
                         </div>
                     </div>
                     
@@ -93,10 +82,6 @@ export class ShareManager {
                             <span>Copy Link</span>
                         </button>
                     </div>
-                    
-                    <button class="download-btn neon-btn" id="downloadImageBtn">
-                        Download Image
-                    </button>
                 </div>
             </div>
         `;
@@ -150,42 +135,10 @@ export class ShareManager {
                 line-height: 1;
             }
             
-            .share-preview-container {
-                position: relative;
-                margin-bottom: var(--space-4);
-                border-radius: var(--radius-lg);
-                overflow: hidden;
-                background: var(--bg-secondary);
-                min-height: 180px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            
-            .share-preview {
-                width: 100%;
-                border-radius: var(--radius-lg);
-            }
-            
-            .share-loading {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: var(--space-2);
-                color: var(--text-muted);
-            }
-            
-            .spinner {
-                width: 24px;
-                height: 24px;
-                border: 2px solid var(--neon-cyan);
-                border-top-color: transparent;
-                border-radius: 50%;
-            }
-            
             .share-stats {
-                display: flex;
-                justify-content: space-around;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: var(--space-2);
                 padding: var(--space-3);
                 margin-bottom: var(--space-3);
             }
@@ -231,9 +184,6 @@ export class ShareManager {
                 font-size: var(--font-size-lg);
             }
             
-            .download-btn {
-                width: 100%;
-            }
         `;
         document.head.appendChild(styles);
     }
@@ -254,11 +204,6 @@ export class ShareManager {
         modal.querySelectorAll('.share-btn-item').forEach(btn => {
             btn.onclick = () => this.share(btn.dataset.platform, data);
         });
-
-        // Download button
-        modal.querySelector('#downloadImageBtn').onclick = () => {
-            this.downloadShareImage(data);
-        };
     }
 
     /**
@@ -320,6 +265,11 @@ export class ShareManager {
         ctx.font = '16px "Noto Sans KR", sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.fillText('HIGH SCORE', canvas.width / 2, 200);
+        const rankLabel = this.formatRankLabel(data.currentRank);
+        if (rankLabel !== '-') {
+            ctx.fillStyle = 'rgba(0, 242, 255, 0.9)';
+            ctx.fillText(`RANK ${rankLabel}`, canvas.width / 2, 224);
+        }
 
         // Player name
         ctx.font = 'bold 20px "Noto Sans KR", sans-serif';
@@ -354,6 +304,7 @@ export class ShareManager {
      * Generate share URL with UTM parameters
      */
     generateShareUrl(data) {
+        const currentRank = Number(data.currentRank);
         const params = new URLSearchParams({
             utm_source: 'share',
             utm_medium: 'social',
@@ -362,6 +313,9 @@ export class ShareManager {
             challenge: data.highScore,
             player: encodeURIComponent(data.playerName)
         });
+        if (Number.isFinite(currentRank) && currentRank > 0) {
+            params.set('rank', String(Math.floor(currentRank)));
+        }
 
         return `${this.baseUrl}?${params.toString()}`;
     }
@@ -371,7 +325,9 @@ export class ShareManager {
      */
     share(platform, data) {
         const url = this.generateShareUrl(data);
-        const text = '[MINIGAME] ' + data.gameName + ' - ' + data.highScore.toLocaleString() + ' points! ' + this.getRandomPhrase();
+        const currentRank = this.formatRankLabel(data.currentRank);
+        const rankText = currentRank === '-' ? '' : ` | 랭킹 ${currentRank}`;
+        const text = '[MINIGAME] ' + data.gameName + ' - ' + data.highScore.toLocaleString() + ' points' + rankText + '! ' + this.getRandomPhrase();
 
         switch (platform) {
             case 'twitter':
@@ -452,5 +408,11 @@ export class ShareManager {
      */
     getRandomPhrase() {
         return this.challengePhrases[Math.floor(Math.random() * this.challengePhrases.length)];
+    }
+
+    formatRankLabel(rank) {
+        const safe = Math.floor(Number(rank));
+        if (!Number.isFinite(safe) || safe <= 0) return '-';
+        return `${safe}위`;
     }
 }
