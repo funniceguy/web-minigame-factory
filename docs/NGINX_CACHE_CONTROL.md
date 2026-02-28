@@ -46,3 +46,9 @@ Optional base URL:
 ```bash
 node ./scripts/check-remote-deploy.mjs http://your-host/web-minigame-factory
 ```
+
+## Leaderboard API proxy
+
+For server-side global leaderboard (`/api/*`, SSE 포함), see:
+
+- `docs/NGINX_LEADERBOARD_PROXY.md`

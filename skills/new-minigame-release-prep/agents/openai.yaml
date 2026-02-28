@@ -1,0 +1,4 @@
+interface:
+  display_name: "New Minigame Release Prep"
+  short_description: "Onboard and validate new game release."
+  default_prompt: "Use $new-minigame-release-prep to prepare a newly added mini game for score/rank/achievement integration and release readiness."

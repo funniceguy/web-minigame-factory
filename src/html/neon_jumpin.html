@@ -70,6 +70,68 @@
         };
 
         // 1. BootScene: 에셋 로딩 및 텍스처 실시간 생성
+        const mgpBridge = (() => {
+            const metrics = {
+                startedAt: Date.now(),
+                sent: false
+            };
+
+            const parseNumber = (value) => {
+                const parsed = Number(String(value ?? '').replace(/[^0-9.-]+/g, ''));
+                return Number.isFinite(parsed) ? parsed : NaN;
+            };
+
+            const getPlayScene = () => {
+                const sceneManager = game?.scene;
+                return sceneManager?.keys?.PlayScene
+                    || (typeof sceneManager?.getScene === 'function' ? sceneManager.getScene('PlayScene') : null)
+                    || null;
+            };
+
+            const snapshot = () => {
+                const playScene = getPlayScene();
+                const scoreFromScene = parseNumber(playScene?.score);
+                const scoreFromDom = parseNumber(document.getElementById('game-over-score')?.textContent);
+                const score = Number.isFinite(scoreFromScene)
+                    ? scoreFromScene
+                    : (Number.isFinite(scoreFromDom) ? scoreFromDom : 0);
+
+                return {
+                    score: Math.max(0, Math.floor(score)),
+                    level: 1,
+                    maxCombo: 0,
+                    comboCount: 0,
+                    stageClears: 0,
+                    itemsCollected: 0,
+                    itemCounts: {},
+                    duration: Math.max(1, Math.floor((Date.now() - metrics.startedAt) / 1000))
+                };
+            };
+
+            const postResult = (force = false) => {
+                if (metrics.sent && !force) return;
+                parent.postMessage({
+                    source: 'mgp-game',
+                    type: 'result',
+                    payload: snapshot()
+                }, '*');
+                metrics.sent = true;
+            };
+
+            const reset = () => {
+                metrics.startedAt = Date.now();
+                metrics.sent = false;
+            };
+
+            window.__mgpSnapshot = snapshot;
+            window.addEventListener('beforeunload', () => postResult(true));
+
+            return {
+                reset,
+                postResult
+            };
+        })();
+
         class BootScene extends Phaser.Scene {
             constructor() { super('BootScene'); }
             preload() {
@@ -155,6 +217,7 @@
             constructor() { super('PlayScene'); }
 
             init() {
+                mgpBridge.reset();
                 this.score = 0;
                 this.timeLeft = 45;
                 this.isGameOver = false;
@@ -388,6 +451,7 @@
                 if (this.isGameOver) return; // 중복 실행 방지
                 
                 this.isGameOver = true;
+                mgpBridge.postResult();
                 this.timeEvent.remove();
                 
                 SFX.death(); // 사망 사운드

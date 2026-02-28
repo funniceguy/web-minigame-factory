@@ -52,7 +52,7 @@ const GAME_CARD_PRESETS = {
     }
 };
 
-const LEADERBOARD_REFRESH_INTERVAL_MS = 30000;
+const LEADERBOARD_REFRESH_INTERVAL_MS = 180000;
 
 export class GameHub {
     constructor(containerId) {
@@ -78,12 +78,15 @@ export class GameHub {
             overallTop: [],
             myOverall: null,
             games: {},
+            season: null,
+            source: 'server',
             loading: false,
             error: null,
             lastUpdatedAt: null
         };
         this.refreshLeaderboardPromise = null;
         this.refreshLeaderboardTimer = null;
+        this.unsubscribeLeaderboardRealtime = null;
         this.unsubscribeAuthListener = null;
 
         this.eventsBound = false;
@@ -689,12 +692,18 @@ export class GameHub {
 
             if (this.authState.isSignedIn) {
                 this.syncProfileWithAuthUser(this.authState.user);
-                await leaderboardService.syncFromLocal();
             }
         } catch (error) {
             console.warn('Cloud bootstrap failed:', error);
         }
 
+        try {
+            await leaderboardService.syncFromLocal();
+        } catch (error) {
+            console.warn('Initial leaderboard sync failed:', error);
+        }
+
+        this.setupRealtimeLeaderboard();
         this.startLeaderboardAutoRefresh();
         this.refreshLeaderboards({ force: true });
         this.render();
@@ -704,15 +713,13 @@ export class GameHub {
         this.authState = state;
         this.syncProfileWithAuthUser(state.user);
 
-        if (state.isSignedIn) {
-            leaderboardService.syncFromLocal()
-                .then(() => {
-                    this.refreshLeaderboards({ force: true });
-                })
-                .catch((error) => {
-                    console.warn('Failed to sync local scores after sign-in:', error);
-                });
-        }
+        leaderboardService.syncFromLocal()
+            .then(() => {
+                this.refreshLeaderboards({ force: true });
+            })
+            .catch((error) => {
+                console.warn('Failed to sync leaderboard after auth change:', error);
+            });
 
         this.refreshLeaderboards({ force: true });
         this.render();
@@ -783,6 +790,14 @@ export class GameHub {
         this.refreshLeaderboardTimer = null;
     }
 
+    setupRealtimeLeaderboard() {
+        if (this.unsubscribeLeaderboardRealtime) return;
+
+        this.unsubscribeLeaderboardRealtime = leaderboardService.subscribeRealtime(() => {
+            this.refreshLeaderboards();
+        });
+    }
+
     getLocalOverallHighScoreTotal() {
         const gameStats = storage.getAllGameStats() || {};
         return Object.values(gameStats).reduce((total, gameData) => {
@@ -802,10 +817,6 @@ export class GameHub {
 
     async refreshLeaderboards(options = {}) {
         const { force = false } = options;
-        if (!force && !this.authState.enabled && !this.leaderboardState.enabled) {
-            return null;
-        }
-
         if (this.refreshLeaderboardPromise && !force) {
             return this.refreshLeaderboardPromise;
         }
@@ -824,12 +835,14 @@ export class GameHub {
 
                 this.leaderboardState = {
                     ...this.leaderboardState,
-                    enabled: Boolean(snapshot.enabled),
+                    enabled: Boolean(snapshot.enabled ?? true),
                     overallTop: snapshot.overallTop || [],
                     myOverall: snapshot.myOverall || null,
                     games: snapshot.games || {},
+                    season: snapshot.season || null,
+                    source: snapshot.source || 'server',
                     loading: false,
-                    error: snapshot.enabled ? null : (snapshot.reason || 'disabled'),
+                    error: null,
                     lastUpdatedAt: Date.now()
                 };
             } catch (error) {
@@ -853,8 +866,6 @@ export class GameHub {
     }
 
     async syncLeaderboardAfterSession(gameId) {
-        if (!this.authState.isSignedIn) return;
-
         try {
             await leaderboardService.syncFromLocal(gameId);
             this.refreshLeaderboards({ force: true });
@@ -866,6 +877,37 @@ export class GameHub {
     formatLeaderboardRank(rank) {
         if (!Number.isFinite(rank) || rank <= 0) return '-';
         return `${rank}위`;
+    }
+
+    formatKstDateTime(timestamp) {
+        if (!Number.isFinite(Number(timestamp))) return '-';
+        return new Date(timestamp).toLocaleString('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    }
+
+    getLeaderboardStatusText() {
+        if (this.leaderboardState.loading) {
+            return '서버 랭킹 갱신 중...';
+        }
+
+        const season = this.leaderboardState.season || {};
+        const source = String(this.leaderboardState.source || 'server');
+        const nextResetText = this.formatKstDateTime(season.endAt);
+        const lastUpdatedText = this.leaderboardState.lastUpdatedAt
+            ? new Date(this.leaderboardState.lastUpdatedAt).toLocaleTimeString('ko-KR', { hour12: false })
+            : '-';
+
+        if (source === 'local-fallback') {
+            return `로컬 백업 랭킹 · 서버 연결 대기 · 최근 갱신 ${lastUpdatedText} · 다음 초기화 ${nextResetText} (KST 월요일 09:00)`;
+        }
+
+        return `실시간 서버 랭킹 · 최근 갱신 ${lastUpdatedText} · 다음 초기화 ${nextResetText} (KST 월요일 09:00)`;
     }
 
     renderLeaderboardRows(entries) {
@@ -882,9 +924,26 @@ export class GameHub {
         `).join('');
     }
 
+    resolveCloudDisabledMessage() {
+        const reason = String(this.authState?.reason || 'disabled');
+        const reasonMessages = {
+            disabled: '클라우드 인증이 꺼져 있습니다.',
+            'missing-firebase-keys': 'Firebase 키(apiKey/authDomain/projectId)가 비어 있습니다.',
+            'bootstrap-failed': 'Firebase SDK 초기화에 실패했습니다.'
+        };
+
+        const reasonLabel = reasonMessages[reason] || `클라우드 초기화 실패: ${reason}`;
+        return `${reasonLabel} src/config/cloud-config.js에 Firebase 설정을 입력하세요.`;
+    }
+
     renderCloudAuthControl() {
         if (!this.authState.enabled) {
-            return '<div class="leaderboard-auth-note">클라우드 인증 비활성화 상태입니다. `src/config/cloud-config.js`를 설정하세요.</div>';
+            return `
+                <div class="leaderboard-auth-note">${this.resolveCloudDisabledMessage()}</div>
+                <div class="leaderboard-auth-actions">
+                    <button class="glass-btn leaderboard-auth-btn" data-action="open-cloud-config">클라우드 설정</button>
+                </div>
+            `;
         }
 
         if (this.authState.isSignedIn) {
@@ -892,13 +951,17 @@ export class GameHub {
             return `
                 <div class="leaderboard-auth-user">
                     <span class="leaderboard-auth-text">연동됨: ${user.displayName || 'Player'}${user.email ? ` (${user.email})` : ''}</span>
-                    <button class="glass-btn leaderboard-auth-btn" data-action="logout-cloud">로그아웃</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="glass-btn leaderboard-auth-btn" data-action="open-cloud-config">설정</button>
+                        <button class="glass-btn leaderboard-auth-btn" data-action="logout-cloud">로그아웃</button>
+                    </div>
                 </div>
             `;
         }
 
         return `
             <div class="leaderboard-auth-actions">
+                <button class="glass-btn leaderboard-auth-btn" data-action="open-cloud-config">클라우드 설정</button>
                 <button class="glass-btn leaderboard-auth-btn" data-action="login-google">Google 로그인</button>
                 <button class="glass-btn leaderboard-auth-btn" data-action="login-apple">Apple 로그인</button>
             </div>
@@ -1009,7 +1072,6 @@ export class GameHub {
                         <button class="glass-btn" data-action="refresh-leaderboard">새로고침</button>
                     </div>
                     <div class="leaderboard-subtext">${leaderboardStatus}</div>
-                    ${this.renderCloudAuthControl()}
                     ${this.leaderboardState.error ? `<div class="leaderboard-error">${this.leaderboardState.error}</div>` : ''}
 
                     <div class="ranking-overview">
@@ -1039,14 +1101,7 @@ export class GameHub {
         const myOverall = this.leaderboardState.myOverall;
         const overallScoreDisplay = Number(myOverall?.score ?? localOverallHighScore);
         const overallRankDisplay = this.formatLeaderboardRank(myOverall?.rank);
-        const lastUpdatedText = this.leaderboardState.lastUpdatedAt
-            ? new Date(this.leaderboardState.lastUpdatedAt).toLocaleTimeString('ko-KR', { hour12: false })
-            : '-';
-        const leaderboardStatus = this.leaderboardState.loading
-            ? '랭킹 갱신 중...'
-            : this.leaderboardState.enabled
-                ? `최근 갱신 ${lastUpdatedText}`
-                : '클라우드 랭킹 비활성화';
+        const leaderboardStatus = this.getLeaderboardStatusText();
         const activeTabContent = this.activeTab === 'ranking'
             ? this.renderRankingTab(leaderboardStatus, overallScoreDisplay, overallRankDisplay)
             : this.renderPlayTab();
@@ -1167,6 +1222,10 @@ export class GameHub {
         }
         if (action === 'logout-cloud') {
             this.handleLogoutRequest();
+            return;
+        }
+        if (action === 'open-cloud-config') {
+            this.showCloudConfigPopup();
             return;
         }
         if (action === 'switch-tab') {
@@ -1429,19 +1488,188 @@ export class GameHub {
                         return null;
                     }
                 })()
+            `,
+            'neon-jumpin': `
+                (() => {
+                    try {
+                        const toNumber = (value) => {
+                            const parsed = Number(String(value ?? '').replace(/[^0-9.-]+/g, ''));
+                            return Number.isFinite(parsed) ? parsed : NaN;
+                        };
+
+                        const sceneManager = game?.scene;
+                        const playScene = sceneManager?.keys?.PlayScene
+                            || (typeof sceneManager?.getScene === 'function' ? sceneManager.getScene('PlayScene') : null);
+
+                        const scoreFromScene = toNumber(playScene?.score);
+                        const scoreFromDom = toNumber(document.getElementById('game-over-score')?.textContent);
+                        const score = Number.isFinite(scoreFromScene)
+                            ? scoreFromScene
+                            : (Number.isFinite(scoreFromDom) ? scoreFromDom : 0);
+
+                        return {
+                            score: Math.max(0, Math.floor(score)),
+                            level: 1,
+                            maxCombo: 0,
+                            comboCount: 0,
+                            stageClears: 0,
+                            itemsCollected: 0,
+                            itemCounts: {}
+                        };
+                    } catch (error) {
+                        return null;
+                    }
+                })()
+            `,
+            'neon-fruitmerge': `
+                (() => {
+                    try {
+                        const scoreValue = Math.floor(Number(score ?? displayScore ?? 0));
+                        const levelValue = Math.max(1, Math.floor(Number(stage ?? 1)));
+                        return {
+                            score: Math.max(0, scoreValue),
+                            level: levelValue,
+                            maxCombo: 0,
+                            comboCount: 0,
+                            stageClears: Math.max(0, levelValue - 1),
+                            itemsCollected: 0,
+                            itemCounts: {}
+                        };
+                    } catch (error) {
+                        return null;
+                    }
+                })()
+            `,
+            'neon-strike': `
+                (() => {
+                    try {
+                        const scoreValue = Math.floor(Number(game?.score ?? 0));
+                        const levelValue = Math.max(1, Math.floor(Number(game?.stage ?? 1)));
+                        const comboValue = Math.max(0, Math.floor(Number(game?.combo ?? 0)));
+                        return {
+                            score: Math.max(0, scoreValue),
+                            level: levelValue,
+                            maxCombo: comboValue,
+                            comboCount: comboValue,
+                            stageClears: Math.max(0, levelValue - 1),
+                            itemsCollected: 0,
+                            itemCounts: {}
+                        };
+                    } catch (error) {
+                        return null;
+                    }
+                })()
+            `,
+            'neon-biztycoon': `
+                (() => {
+                    try {
+                        const snapshot = window.__mgpBiztycoonSnapshot;
+                        if (!snapshot || typeof snapshot !== 'object') return null;
+
+                        const scoreValue = Math.max(0, Math.floor(Number(snapshot.score ?? 0)));
+                        const levelValue = Math.max(1, Math.floor(Number(snapshot.level ?? 1)));
+                        const maxComboValue = Math.max(0, Math.floor(Number(snapshot.maxCombo ?? 0)));
+                        const comboCountValue = Math.max(0, Math.floor(Number(snapshot.comboCount ?? maxComboValue)));
+                        const stageClearsValue = Math.max(
+                            0,
+                            Math.floor(Number(snapshot.stageClears ?? Math.max(0, levelValue - 1)))
+                        );
+                        return {
+                            score: scoreValue,
+                            level: levelValue,
+                            maxCombo: maxComboValue,
+                            comboCount: comboCountValue,
+                            stageClears: stageClearsValue,
+                            itemsCollected: Math.max(0, Math.floor(Number(snapshot.itemsCollected ?? 0))),
+                            itemCounts: snapshot.itemCounts && typeof snapshot.itemCounts === 'object'
+                                ? snapshot.itemCounts
+                                : {}
+                        };
+                    } catch (error) {
+                        return null;
+                    }
+                })()
             `
         };
 
-        const fallbackScript = fallbackByGame[gameId];
-        if (!fallbackScript) return null;
+        const genericFallbackScript = `
+            (() => {
+                try {
+                    const parseNumber = (value) => {
+                        if (typeof value === 'number' && Number.isFinite(value)) return value;
+                        if (typeof value !== 'string') return NaN;
+                        const normalized = value.replace(/,/g, '');
+                        const matched = normalized.match(/-?\\d+(?:\\.\\d+)?/);
+                        if (!matched) return NaN;
+                        const parsed = Number(matched[0]);
+                        return Number.isFinite(parsed) ? parsed : NaN;
+                    };
+                    const pick = (...values) => {
+                        for (const value of values) {
+                            const parsed = parseNumber(value);
+                            if (Number.isFinite(parsed)) return parsed;
+                        }
+                        return NaN;
+                    };
+                    const byId = (id) => document.getElementById(id)?.textContent || '';
 
-        try {
-            const fallbackSnapshot = iframe.contentWindow.eval(fallbackScript);
-            if (fallbackSnapshot && typeof fallbackSnapshot === 'object') {
-                return fallbackSnapshot;
+                    const scoreValue = pick(
+                        window.score,
+                        window.game?.score,
+                        window.gameState?.score,
+                        window.state?.score,
+                        byId('score-display'),
+                        byId('scoreText'),
+                        byId('score-txt'),
+                        byId('finalScore'),
+                        byId('game-over-score')
+                    );
+                    const levelValue = pick(
+                        window.level,
+                        window.stage,
+                        window.wave,
+                        window.game?.stage,
+                        window.gameState?.level,
+                        byId('stage-display'),
+                        byId('stageText'),
+                        byId('finalStage'),
+                        1
+                    );
+                    if (!Number.isFinite(scoreValue) && !Number.isFinite(levelValue)) return null;
+
+                    const safeLevel = Number.isFinite(levelValue)
+                        ? Math.max(1, Math.floor(levelValue))
+                        : 1;
+                    return {
+                        score: Number.isFinite(scoreValue) ? Math.max(0, Math.floor(scoreValue)) : 0,
+                        level: safeLevel,
+                        maxCombo: 0,
+                        comboCount: 0,
+                        stageClears: Math.max(0, safeLevel - 1),
+                        itemsCollected: 0,
+                        itemCounts: {}
+                    };
+                } catch (error) {
+                    return null;
+                }
+            })()
+        `;
+
+        const scriptsToTry = [];
+        if (fallbackByGame[gameId]) {
+            scriptsToTry.push(fallbackByGame[gameId]);
+        }
+        scriptsToTry.push(genericFallbackScript);
+
+        for (const script of scriptsToTry) {
+            try {
+                const fallbackSnapshot = iframe.contentWindow.eval(script);
+                if (fallbackSnapshot && typeof fallbackSnapshot === 'object') {
+                    return fallbackSnapshot;
+                }
+            } catch (error) {
+                console.warn('Fallback snapshot eval failed:', error);
             }
-        } catch (error) {
-            console.warn('Fallback snapshot eval failed:', error);
         }
 
         return null;
@@ -1488,6 +1716,79 @@ export class GameHub {
         }
 
         this.render();
+    }
+
+    showCloudConfigPopup() {
+        if (document.querySelector('.cloud-config-modal')) return;
+
+        let existing = {};
+        try {
+            const raw = localStorage.getItem('mgp_cloud_config');
+            if (raw) existing = JSON.parse(raw) || {};
+        } catch (error) {
+            console.warn('Failed to read local cloud config:', error);
+        }
+
+        const firebase = existing.firebase || {};
+        const enabled = existing.enabled ?? true;
+
+        const modal = document.createElement('div');
+        modal.className = 'hub-modal-overlay glass-overlay animate-fadeIn cloud-config-modal';
+        modal.innerHTML = `
+            <div class="hub-modal glass-modal animate-fadeInScale" style="width:min(560px,92vw);padding:16px;display:flex;flex-direction:column;gap:10px;">
+                <div class="popup-header">
+                    <h2 class="font-display neon-text-cyan">클라우드 설정</h2>
+                    <button class="glass-btn popup-close" id="closeCloudConfigBtn">닫기</button>
+                </div>
+                <label style="display:flex;gap:8px;align-items:center;font-size:0.9rem;">
+                    <input type="checkbox" id="cloudEnabledInput" ${enabled ? 'checked' : ''}>
+                    클라우드 인증/랭킹 활성화
+                </label>
+                <input class="glass-input" id="cloudApiKeyInput" placeholder="Firebase apiKey" value="${firebase.apiKey || ''}">
+                <input class="glass-input" id="cloudAuthDomainInput" placeholder="Firebase authDomain (예: your-app.firebaseapp.com)" value="${firebase.authDomain || ''}">
+                <input class="glass-input" id="cloudProjectIdInput" placeholder="Firebase projectId" value="${firebase.projectId || ''}">
+                <input class="glass-input" id="cloudAppIdInput" placeholder="Firebase appId (선택)" value="${firebase.appId || ''}">
+                <input class="glass-input" id="cloudStorageBucketInput" placeholder="Firebase storageBucket (선택)" value="${firebase.storageBucket || ''}">
+                <input class="glass-input" id="cloudMessagingSenderIdInput" placeholder="Firebase messagingSenderId (선택)" value="${firebase.messagingSenderId || ''}">
+                <p class="text-secondary" style="margin:0;font-size:0.78rem;">저장 시 브라우저 로컬 저장소(mgp_cloud_config)에 보관되며 페이지가 새로고침됩니다.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                    <button class="glass-btn" id="clearCloudConfigBtn">설정 초기화</button>
+                    <button class="glass-btn" id="closeCloudConfigBtnBottom">취소</button>
+                    <button class="neon-btn" id="saveCloudConfigBtn">저장 후 적용</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        const close = () => modal.remove();
+
+        modal.querySelector('#closeCloudConfigBtn')?.addEventListener('click', close);
+        modal.querySelector('#closeCloudConfigBtnBottom')?.addEventListener('click', close);
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) close();
+        });
+
+        modal.querySelector('#saveCloudConfigBtn')?.addEventListener('click', () => {
+            const nextConfig = {
+                enabled: Boolean(modal.querySelector('#cloudEnabledInput')?.checked),
+                firebase: {
+                    apiKey: modal.querySelector('#cloudApiKeyInput')?.value.trim() || '',
+                    authDomain: modal.querySelector('#cloudAuthDomainInput')?.value.trim() || '',
+                    projectId: modal.querySelector('#cloudProjectIdInput')?.value.trim() || '',
+                    appId: modal.querySelector('#cloudAppIdInput')?.value.trim() || '',
+                    storageBucket: modal.querySelector('#cloudStorageBucketInput')?.value.trim() || '',
+                    messagingSenderId: modal.querySelector('#cloudMessagingSenderIdInput')?.value.trim() || ''
+                }
+            };
+
+            localStorage.setItem('mgp_cloud_config', JSON.stringify(nextConfig));
+            window.location.reload();
+        });
+
+        modal.querySelector('#clearCloudConfigBtn')?.addEventListener('click', () => {
+            localStorage.removeItem('mgp_cloud_config');
+            window.location.reload();
+        });
     }
 
     showAchievementsPopup(gameId) {
@@ -1570,11 +1871,16 @@ export class GameHub {
             if (this.authState.isSignedIn) {
                 try {
                     await cloudAuth.updateDisplayName(nickname);
-                    await leaderboardService.syncFromLocal();
-                    this.refreshLeaderboards({ force: true });
                 } catch (error) {
-                    console.warn('Failed to sync profile nickname to leaderboard:', error);
+                    console.warn('Failed to sync nickname to cloud profile:', error);
                 }
+            }
+
+            try {
+                await leaderboardService.syncFromLocal();
+                this.refreshLeaderboards({ force: true });
+            } catch (error) {
+                console.warn('Failed to sync profile nickname to server leaderboard:', error);
             }
 
             modal.remove();

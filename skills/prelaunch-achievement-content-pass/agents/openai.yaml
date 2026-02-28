@@ -1,0 +1,4 @@
+interface:
+  display_name: "Achievement Content Pass"
+  short_description: "Expand and verify achievements."
+  default_prompt: "Use $prelaunch-achievement-content-pass to audit and add prelaunch achievement content for all games."

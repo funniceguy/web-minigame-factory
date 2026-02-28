@@ -70,6 +70,52 @@ export class AchievementSystem {
             { id: 'nv_total_score_150000', name: 'Arena Legend', desc: 'Total score 150,000', icon: '*', points: 36, metric: 'totalScore', threshold: 150000 },
             { id: 'nv_best_stage_25', name: 'Wave Conqueror', desc: 'Best stage 25', icon: '*', points: 24, metric: 'bestStage', threshold: 25 }
         ]);
+
+        this.register('neon-biztycoon', [
+            { id: 'nbz_play_1', name: 'First Board Meeting', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nbz_play_12', name: 'Executive Loop', desc: 'Play 12 times', icon: '*', points: 14, metric: 'playCount', threshold: 12 },
+            { id: 'nbz_high_100000', name: 'Cash Runner', desc: 'High score 100,000', icon: '*', points: 14, metric: 'highScore', threshold: 100000 },
+            { id: 'nbz_high_1000000', name: 'Neon IPO', desc: 'High score 1,000,000', icon: '*', points: 30, metric: 'highScore', threshold: 1000000 },
+            { id: 'nbz_best_stage_3', name: 'Multi Stage Operator', desc: 'Best stage 3', icon: '*', points: 18, metric: 'bestStage', threshold: 3 },
+            { id: 'nbz_total_stage_20', name: 'Expansion Drive', desc: 'Total stage clears 20', icon: '*', points: 24, metric: 'totalStageClears', threshold: 20 },
+            { id: 'nbz_item_employee_40', name: 'People Builder', desc: 'Collect employee count 40', icon: '*', points: 18, metric: 'item.employee', threshold: 40 },
+            { id: 'nbz_items_80', name: 'HR Pipeline', desc: 'Collect items 80 times', icon: '*', points: 20, metric: 'totalItemsCollected', threshold: 80 },
+            { id: 'nbz_total_score_3000000', name: 'Capital Engine', desc: 'Total score 3,000,000', icon: '*', points: 34, metric: 'totalScore', threshold: 3000000 }
+        ]);
+
+        this.register('neon-fruitmerge', [
+            { id: 'nfm_play_1', name: 'First Drop', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nfm_play_12', name: 'Merge Habit', desc: 'Play 12 times', icon: '*', points: 14, metric: 'playCount', threshold: 12 },
+            { id: 'nfm_high_5000', name: 'Sweet Stack', desc: 'High score 5,000', icon: '*', points: 12, metric: 'highScore', threshold: 5000 },
+            { id: 'nfm_high_20000', name: 'Merge Reactor', desc: 'High score 20,000', icon: '*', points: 26, metric: 'highScore', threshold: 20000 },
+            { id: 'nfm_best_stage_4', name: 'Stage Mixer', desc: 'Best stage 4', icon: '*', points: 18, metric: 'bestStage', threshold: 4 },
+            { id: 'nfm_total_stage_35', name: 'Conveyor Master', desc: 'Total stage clears 35', icon: '*', points: 24, metric: 'totalStageClears', threshold: 35 },
+            { id: 'nfm_total_score_120000', name: 'Sugar Economy', desc: 'Total score 120,000', icon: '*', points: 30, metric: 'totalScore', threshold: 120000 },
+            { id: 'nfm_playtime_3600', name: 'Late Shift', desc: 'Total play time 3,600s', icon: '*', points: 20, metric: 'totalPlayTime', threshold: 3600 }
+        ]);
+
+        this.register('neon-jumpin', [
+            { id: 'nj_play_1', name: 'First Fall', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nj_play_20', name: 'Gravity Habit', desc: 'Play 20 times', icon: '*', points: 16, metric: 'playCount', threshold: 20 },
+            { id: 'nj_high_300', name: 'Deep Entry', desc: 'High score 300', icon: '*', points: 10, metric: 'highScore', threshold: 300 },
+            { id: 'nj_high_1200', name: 'Abyss Driver', desc: 'High score 1,200', icon: '*', points: 24, metric: 'highScore', threshold: 1200 },
+            { id: 'nj_best_stage_1', name: 'Depth License', desc: 'Best stage 1', icon: '*', points: 8, metric: 'bestStage', threshold: 1 },
+            { id: 'nj_total_score_15000', name: 'Momentum Ledger', desc: 'Total score 15,000', icon: '*', points: 22, metric: 'totalScore', threshold: 15000 },
+            { id: 'nj_total_score_60000', name: 'Neon Freefall', desc: 'Total score 60,000', icon: '*', points: 30, metric: 'totalScore', threshold: 60000 },
+            { id: 'nj_playtime_2400', name: 'Depth Training', desc: 'Total play time 2,400s', icon: '*', points: 18, metric: 'totalPlayTime', threshold: 2400 }
+        ]);
+
+        this.register('neon-strike', [
+            { id: 'nst_play_1', name: 'First Sortie', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
+            { id: 'nst_play_15', name: 'Squad Routine', desc: 'Play 15 times', icon: '*', points: 14, metric: 'playCount', threshold: 15 },
+            { id: 'nst_high_12000', name: 'Battle Spark', desc: 'High score 12,000', icon: '*', points: 14, metric: 'highScore', threshold: 12000 },
+            { id: 'nst_high_50000', name: 'Strike Commander', desc: 'High score 50,000', icon: '*', points: 30, metric: 'highScore', threshold: 50000 },
+            { id: 'nst_best_stage_6', name: 'Frontline Advance', desc: 'Best stage 6', icon: '*', points: 20, metric: 'bestStage', threshold: 6 },
+            { id: 'nst_total_stage_80', name: 'Theater Control', desc: 'Total stage clears 80', icon: '*', points: 26, metric: 'totalStageClears', threshold: 80 },
+            { id: 'nst_combo_20', name: 'Chain Suppressor', desc: 'Max combo 20', icon: '*', points: 18, metric: 'maxCombo', threshold: 20 },
+            { id: 'nst_combo_total_300', name: 'Chain Operator', desc: 'Total combo 300', icon: '*', points: 22, metric: 'totalComboCount', threshold: 300 },
+            { id: 'nst_total_score_300000', name: 'War Ledger', desc: 'Total score 300,000', icon: '*', points: 34, metric: 'totalScore', threshold: 300000 }
+        ]);
     }
 
     /**

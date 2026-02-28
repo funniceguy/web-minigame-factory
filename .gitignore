@@ -1,0 +1,5 @@
+node_modules/
+data/leaderboard-store.json
+data/leaderboard-store.json.tmp
+deploy/_out/
+run_local*.log

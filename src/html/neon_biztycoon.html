@@ -296,9 +296,73 @@
                 normalCards: 1, headhuntCards: 1,
                 normalProgress: 0, headhuntProgress: 0
             });
+
+            const mgpSessionRef = useRef({
+                startedAt: Date.now(),
+                sentState: ''
+            });
             
             const stage = STAGES[stageIdx];
-            
+
+            const buildMgpSnapshot = () => {
+                const score = Math.max(0, Math.floor(Number(res.cash) || 0));
+                const level = Math.max(1, Math.floor(stageIdx + 1));
+                return {
+                    score,
+                    level,
+                    maxCombo: 0,
+                    comboCount: 0,
+                    stageClears: Math.max(0, level - 1),
+                    itemsCollected: Math.max(0, emps.length),
+                    itemCounts: { employee: Math.max(0, emps.length) },
+                    duration: Math.max(1, Math.floor((Date.now() - mgpSessionRef.current.startedAt) / 1000))
+                };
+            };
+
+            useEffect(() => {
+                if (gameState === 'playing' && day <= 1 && stageIdx === 0) {
+                    mgpSessionRef.current.startedAt = Date.now();
+                    mgpSessionRef.current.sentState = '';
+                }
+            }, [gameState, day, stageIdx]);
+
+            useEffect(() => {
+                window.__mgpBiztycoonSnapshot = buildMgpSnapshot();
+                window.__mgpSnapshot = () => ({ ...buildMgpSnapshot() });
+            }, [res.cash, stageIdx, emps.length, gameState, day]);
+
+            useEffect(() => {
+                const terminalStates = new Set(['bankrupt', 'gameClear']);
+                if (!terminalStates.has(gameState)) return;
+                if (mgpSessionRef.current.sentState === gameState) return;
+
+                const payload = buildMgpSnapshot();
+                parent.postMessage({
+                    source: 'mgp-game',
+                    type: 'result',
+                    payload
+                }, '*');
+                mgpSessionRef.current.sentState = gameState;
+            }, [gameState, res.cash, stageIdx, emps.length]);
+
+            useEffect(() => {
+                const handleBeforeUnload = () => {
+                    const payload = typeof window.__mgpSnapshot === 'function'
+                        ? window.__mgpSnapshot()
+                        : buildMgpSnapshot();
+                    parent.postMessage({
+                        source: 'mgp-game',
+                        type: 'result',
+                        payload
+                    }, '*');
+                };
+
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => {
+                    window.removeEventListener('beforeunload', handleBeforeUnload);
+                };
+            }, []);
+             
             const myQual = 20 * stage.difficulty + (emps.reduce((acc, e) => acc + (e.skill * (e.loyalty >= 50 ? 1 : e.loyalty/100)), 0) * 0.5);
             const rivalQual = 20 * stage.difficulty + (rival.emps.reduce((acc, e) => acc + (e.skill * (e.loyalty >= 50 ? 1 : e.loyalty/100)), 0) * 0.5);
             const myValue = (myQual / strat.price) * 100;

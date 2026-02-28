@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-02-28T16:57:27.262Z",
+  "target": {
+    "id": "does-not-exist",
+    "path": null,
+    "exists": false,
+    "inRegistry": false
+  },
+  "checks": {
+    "syncOk": true,
+    "bridge": false,
+    "fallback": false,
+    "dedicatedCoverage": false,
+    "hasAchievementPack": false,
+    "leaderboardAuditOk": true,
+    "achievementAuditOk": true
+  },
+  "patternSummary": {
+    "bridgeGameIds": [
+      "neon-biztycoon",
+      "neon-jumpin",
+      "neon-survivor"
+    ],
+    "fallbackGameIds": [
+      "neon-biztycoon",
+      "neon-block",
+      "neon-findmine",
+      "neon-fruitmerge",
+      "neon-jumpin",
+      "neon-slotmachine",
+      "neon-strike",
+      "neon-survivor"
+    ],
+    "itemMetricPatterns": [
+      "item.bingo",
+      "item.employee",
+      "item.fireball",
+      "item.flag",
+      "item.multiball",
+      "item.ricochet",
+      "item.shield",
+      "item.skull_bingo",
+      "item.spin_chip"
+    ]
+  }
+}

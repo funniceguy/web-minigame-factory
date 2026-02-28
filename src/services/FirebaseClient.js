@@ -14,9 +14,14 @@ export class FirebaseClient {
     }
 
     resolveConfig() {
-        const runtimeConfig = (typeof globalThis !== 'undefined' && globalThis.__MGP_CLOUD_CONFIG__)
+        const localRuntimeConfig = this.readLocalRuntimeConfig();
+        const globalRuntimeConfig = (typeof globalThis !== 'undefined' && globalThis.__MGP_CLOUD_CONFIG__)
             ? globalThis.__MGP_CLOUD_CONFIG__
             : {};
+        const runtimeConfig = {
+            ...localRuntimeConfig,
+            ...globalRuntimeConfig
+        };
 
         const mergedFirebase = {
             ...(cloudConfig.firebase || {}),
@@ -32,11 +37,29 @@ export class FirebaseClient {
             }
         };
 
-        const enabled = runtimeConfig.enabled ?? cloudConfig.enabled;
+        const runtimeHasEnabledFlag = Object.prototype.hasOwnProperty.call(runtimeConfig, 'enabled');
+        const hasFirebaseKeys = this.hasRequiredFirebaseKeys(mergedFirebase);
+
+        let enabled = false;
+        let enabledSource = 'none';
+
+        if (runtimeHasEnabledFlag) {
+            enabled = Boolean(runtimeConfig.enabled);
+            enabledSource = 'runtime-flag';
+        } else if (cloudConfig.enabled === true) {
+            enabled = true;
+            enabledSource = 'file-flag';
+        } else if (hasFirebaseKeys) {
+            // Safety: if firebase keys exist but enabled flag is omitted/forgotten, auto-enable.
+            enabled = true;
+            enabledSource = 'auto-by-keys';
+        }
+
         return {
             ...cloudConfig,
             ...runtimeConfig,
             enabled: Boolean(enabled),
+            enabledSource,
             firebase: mergedFirebase,
             leaderboard: mergedLeaderboard
         };
@@ -48,6 +71,21 @@ export class FirebaseClient {
             && firebase.authDomain
             && firebase.projectId
         );
+    }
+
+    readLocalRuntimeConfig() {
+        if (typeof localStorage === 'undefined') return {};
+
+        try {
+            const raw = localStorage.getItem('mgp_cloud_config');
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return {};
+            return parsed;
+        } catch (error) {
+            console.warn('Failed to parse local cloud config:', error);
+            return {};
+        }
     }
 
     async init() {
@@ -66,7 +104,8 @@ export class FirebaseClient {
             this.context = {
                 enabled: false,
                 config,
-                reason: 'disabled'
+                reason: 'disabled',
+                details: `enabledSource=${config.enabledSource || 'none'}`
             };
             this.initialized = true;
             return this.context;

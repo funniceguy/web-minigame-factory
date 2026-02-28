@@ -1,0 +1,4 @@
+interface:
+  display_name: "Leaderboard Hardening"
+  short_description: "Fix and verify score reflection."
+  default_prompt: "Use $leaderboard-reflection-hardening to audit and harden leaderboard score reflection across all games."

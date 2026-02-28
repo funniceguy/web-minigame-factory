@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Readiness Gate"
+  short_description: "Final predeploy validation gate."
+  default_prompt: "Use $release-readiness-gate to run the final predeploy gate including leaderboard and achievement verification."

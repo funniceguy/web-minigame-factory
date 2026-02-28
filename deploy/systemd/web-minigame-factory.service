@@ -1,0 +1,17 @@
+[Unit]
+Description=Web Minigame Factory Leaderboard Backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/web-minigame-factory
+Environment=NODE_ENV=production
+Environment=PORT=3001
+ExecStart=/usr/bin/node /var/www/web-minigame-factory/server/leaderboard-server.mjs
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

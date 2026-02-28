@@ -4,10 +4,12 @@
   "description": "High-performance web minigame platform with SNS sharing",
   "type": "module",
   "scripts": {
-    "dev": "npx serve . -l 3001",
-    "start": "npx serve . -l 3001",
+    "dev": "node ./server/leaderboard-server.mjs",
+    "start": "node ./server/leaderboard-server.mjs",
+    "dev:static": "npx serve . -l 3001",
     "sync:games": "node ./scripts/sync-game-registry.mjs",
-    "check:remote": "node ./scripts/check-remote-deploy.mjs"
+    "check:remote": "node ./scripts/check-remote-deploy.mjs",
+    "check:leaderboard": "node ./scripts/check-leaderboard-api.mjs"
   },
   "keywords": ["minigame", "canvas", "html5", "mobile"],
   "author": "",

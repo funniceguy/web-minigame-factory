@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-02-18T13:00:27.944Z",
+  "generatedAt": "2026-02-28T16:58:21.568Z",
   "games": [
     {
       "path": "/src/html/neon_biztycoon.html"
@@ -12,7 +12,16 @@
       "path": "/src/html/neon_findmine.html"
     },
     {
+      "path": "/src/html/neon_fruitmerge.html"
+    },
+    {
+      "path": "/src/html/neon_jumpin.html"
+    },
+    {
       "path": "/src/html/neon_slotmachine.html"
+    },
+    {
+      "path": "/src/html/neon_strike.html"
     },
     {
       "path": "/src/html/neon_survivor.html"
