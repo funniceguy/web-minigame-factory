@@ -319,6 +319,19 @@
                 };
             };
 
+            const postMgpResult = (payload) => {
+                try {
+                    if (!window.parent || window.parent === window) return;
+                    window.parent.postMessage({
+                        source: 'mgp-game',
+                        type: 'result',
+                        payload
+                    }, '*');
+                } catch (error) {
+                    console.warn('Failed to post BizTycoon result message:', error);
+                }
+            };
+
             useEffect(() => {
                 if (gameState === 'playing' && day <= 1 && stageIdx === 0) {
                     mgpSessionRef.current.startedAt = Date.now();
@@ -337,11 +350,7 @@
                 if (mgpSessionRef.current.sentState === gameState) return;
 
                 const payload = buildMgpSnapshot();
-                parent.postMessage({
-                    source: 'mgp-game',
-                    type: 'result',
-                    payload
-                }, '*');
+                postMgpResult(payload);
                 mgpSessionRef.current.sentState = gameState;
             }, [gameState, res.cash, stageIdx, emps.length]);
 
@@ -350,11 +359,7 @@
                     const payload = typeof window.__mgpSnapshot === 'function'
                         ? window.__mgpSnapshot()
                         : buildMgpSnapshot();
-                    parent.postMessage({
-                        source: 'mgp-game',
-                        type: 'result',
-                        payload
-                    }, '*');
+                    postMgpResult(payload);
                 };
 
                 window.addEventListener('beforeunload', handleBeforeUnload);

@@ -88,6 +88,7 @@ export class GameHub {
         this.refreshLeaderboardTimer = null;
         this.unsubscribeLeaderboardRealtime = null;
         this.unsubscribeAuthListener = null;
+        this.deferredRenderRequested = false;
 
         this.eventsBound = false;
         this.discoveryStarted = false;
@@ -104,6 +105,21 @@ export class GameHub {
         this.setupEventListeners();
         this.discoverGames();
         this.bootstrapCloud();
+    }
+
+    requestRender(_reason = 'unknown', options = {}) {
+        const { force = false } = options;
+        const isPlaying = Boolean(this.currentSession);
+
+        // Keep gameplay stable by deferring lobby re-renders while a game session is active.
+        if (isPlaying && !force) {
+            this.deferredRenderRequested = true;
+            return false;
+        }
+
+        this.deferredRenderRequested = false;
+        this.render();
+        return true;
     }
 
     async discoverGames() {
@@ -128,7 +144,7 @@ export class GameHub {
                 this.gameRegistry = new Map(
                     discoveredConfigs.map((game) => [game.id, game])
                 );
-                this.render();
+                this.requestRender('discover-games');
                 this.refreshLeaderboards({ force: true });
             }
         } catch (error) {
@@ -706,7 +722,7 @@ export class GameHub {
         this.setupRealtimeLeaderboard();
         this.startLeaderboardAutoRefresh();
         this.refreshLeaderboards({ force: true });
-        this.render();
+        this.requestRender('bootstrap-cloud');
     }
 
     handleAuthStateChange(state) {
@@ -722,7 +738,7 @@ export class GameHub {
             });
 
         this.refreshLeaderboards({ force: true });
-        this.render();
+        this.requestRender('auth-state-change');
     }
 
     syncProfileWithAuthUser(user) {
@@ -824,7 +840,7 @@ export class GameHub {
         const runRefresh = async () => {
             this.leaderboardState.loading = true;
             this.leaderboardState.error = null;
-            this.render();
+            this.requestRender('refresh-leaderboards-start');
 
             try {
                 const snapshot = await leaderboardService.getAllGameLeaderboardSnapshot({
@@ -854,7 +870,7 @@ export class GameHub {
                 };
             }
 
-            this.render();
+            this.requestRender('refresh-leaderboards-end');
         };
 
         this.refreshLeaderboardPromise = runRefresh()
@@ -1715,7 +1731,7 @@ export class GameHub {
             gameContainer.style.display = 'none';
         }
 
-        this.render();
+        this.requestRender('exit-game', { force: true });
     }
 
     showCloudConfigPopup() {
