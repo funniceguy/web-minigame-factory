@@ -53,6 +53,7 @@ const GAME_CARD_PRESETS = {
 };
 
 const LEADERBOARD_REFRESH_INTERVAL_MS = 180000;
+const RANK_WATCH_STORAGE_KEY = 'mgp_rank_watch_v1';
 
 export class GameHub {
     constructor(containerId) {
@@ -84,6 +85,7 @@ export class GameHub {
             error: null,
             lastUpdatedAt: null
         };
+        this.rankWatchState = this.loadRankWatchState();
         this.refreshLeaderboardPromise = null;
         this.refreshLeaderboardTimer = null;
         this.unsubscribeLeaderboardRealtime = null;
@@ -770,6 +772,11 @@ export class GameHub {
     }
 
     async handleLoginRequest(providerType) {
+        if (!this.authState?.enabled) {
+            this.showCloudConfigPopup();
+            return;
+        }
+
         try {
             if (providerType === 'apple') {
                 const result = await cloudAuth.signInWithApple();
@@ -815,10 +822,205 @@ export class GameHub {
     }
 
     getLocalOverallHighScoreTotal() {
-        const gameStats = storage.getAllGameStats() || {};
-        return Object.values(gameStats).reduce((total, gameData) => {
-            return total + Number(gameData?.highScore || 0);
+        const seasonalScores = storage.getSeasonalHighScoresMap() || {};
+        return Object.values(seasonalScores).reduce((total, score) => {
+            return total + Number(score || 0);
         }, 0);
+    }
+
+    createEmptyRankWatchState(seasonId = '') {
+        return {
+            version: 1,
+            seasonId: String(seasonId || ''),
+            updatedAt: Date.now(),
+            games: {}
+        };
+    }
+
+    normalizeRankWatchState(raw = {}) {
+        const safeRaw = raw && typeof raw === 'object' ? raw : {};
+        const sourceGames = safeRaw.games && typeof safeRaw.games === 'object'
+            ? safeRaw.games
+            : {};
+        const normalizedGames = {};
+
+        Object.entries(sourceGames).forEach(([gameId, rawEntry]) => {
+            if (!gameId || !rawEntry || typeof rawEntry !== 'object') return;
+            const anchorRank = Number(rawEntry.anchorRank);
+            const anchorScore = Number(rawEntry.anchorScore);
+            const currentRank = Number(rawEntry.currentRank);
+            const currentScore = Number(rawEntry.currentScore);
+            const dropBy = Number(rawEntry.dropBy);
+            const detectedAt = Number(rawEntry.detectedAt);
+            const safeAnchorRank = Number.isFinite(anchorRank) && anchorRank > 0 ? Math.floor(anchorRank) : null;
+            const safeCurrentRank = Number.isFinite(currentRank) && currentRank > 0 ? Math.floor(currentRank) : null;
+            const safeAnchorScore = Number.isFinite(anchorScore) ? Math.max(0, Math.floor(anchorScore)) : 0;
+            const safeCurrentScore = Number.isFinite(currentScore) ? Math.max(0, Math.floor(currentScore)) : 0;
+            const safeDropBy = Number.isFinite(dropBy) ? Math.max(0, Math.floor(dropBy)) : 0;
+
+            normalizedGames[gameId] = {
+                anchorRank: safeAnchorRank,
+                anchorScore: safeAnchorScore,
+                currentRank: safeCurrentRank,
+                currentScore: safeCurrentScore,
+                dropBy: safeDropBy,
+                isDropped: Boolean(rawEntry.isDropped && safeDropBy > 0),
+                detectedAt: Number.isFinite(detectedAt) && detectedAt > 0 ? Math.floor(detectedAt) : null
+            };
+        });
+
+        return {
+            version: 1,
+            seasonId: String(safeRaw.seasonId || ''),
+            updatedAt: Number.isFinite(Number(safeRaw.updatedAt)) ? Math.floor(Number(safeRaw.updatedAt)) : Date.now(),
+            games: normalizedGames
+        };
+    }
+
+    loadRankWatchState() {
+        try {
+            const raw = localStorage.getItem(RANK_WATCH_STORAGE_KEY);
+            if (!raw) return this.createEmptyRankWatchState();
+            return this.normalizeRankWatchState(JSON.parse(raw));
+        } catch (error) {
+            console.warn('Failed to load rank watch state:', error);
+            return this.createEmptyRankWatchState();
+        }
+    }
+
+    persistRankWatchState() {
+        try {
+            localStorage.setItem(RANK_WATCH_STORAGE_KEY, JSON.stringify(this.rankWatchState));
+        } catch (error) {
+            console.warn('Failed to persist rank watch state:', error);
+        }
+    }
+
+    syncRankWatchSeason(seasonId = '') {
+        const normalizedSeasonId = String(seasonId || '').trim();
+        if (!normalizedSeasonId) return;
+
+        if (this.rankWatchState?.seasonId === normalizedSeasonId) return;
+        this.rankWatchState = this.createEmptyRankWatchState(normalizedSeasonId);
+        this.persistRankWatchState();
+    }
+
+    updateRankWatchFromSnapshot(snapshotGames = {}, season = null) {
+        const seasonId = String(season?.id || '').trim();
+        if (seasonId) {
+            this.syncRankWatchSeason(seasonId);
+        }
+
+        const rankWatch = this.normalizeRankWatchState(this.rankWatchState);
+        const nextGames = { ...(rankWatch.games || {}) };
+        let changed = false;
+
+        Object.entries(snapshotGames || {}).forEach(([gameId, rankingData]) => {
+            const my = rankingData?.my && typeof rankingData.my === 'object' ? rankingData.my : null;
+            const currentRank = Number.isFinite(Number(my?.rank)) && Number(my.rank) > 0
+                ? Math.floor(Number(my.rank))
+                : null;
+            const currentScore = Number.isFinite(Number(my?.score))
+                ? Math.max(0, Math.floor(Number(my.score)))
+                : 0;
+
+            if (!my || currentRank === null || currentScore <= 0) {
+                if (nextGames[gameId]) {
+                    delete nextGames[gameId];
+                    changed = true;
+                }
+                return;
+            }
+
+            const existing = nextGames[gameId] && typeof nextGames[gameId] === 'object'
+                ? nextGames[gameId]
+                : null;
+
+            if (!existing) {
+                nextGames[gameId] = {
+                    anchorRank: currentRank,
+                    anchorScore: currentScore,
+                    currentRank,
+                    currentScore,
+                    dropBy: 0,
+                    isDropped: false,
+                    detectedAt: null
+                };
+                changed = true;
+                return;
+            }
+
+            const safeAnchorScore = Number.isFinite(Number(existing.anchorScore))
+                ? Math.max(0, Math.floor(Number(existing.anchorScore)))
+                : 0;
+            const safeAnchorRank = Number.isFinite(Number(existing.anchorRank)) && Number(existing.anchorRank) > 0
+                ? Math.floor(Number(existing.anchorRank))
+                : currentRank;
+
+            let nextEntry = {
+                ...existing,
+                currentRank,
+                currentScore
+            };
+
+            if (currentScore > safeAnchorScore) {
+                nextEntry = {
+                    ...nextEntry,
+                    anchorRank: currentRank,
+                    anchorScore: currentScore,
+                    dropBy: 0,
+                    isDropped: false,
+                    detectedAt: null
+                };
+            } else if (currentScore === safeAnchorScore && currentRank > safeAnchorRank) {
+                nextEntry = {
+                    ...nextEntry,
+                    anchorRank: safeAnchorRank,
+                    anchorScore: safeAnchorScore,
+                    dropBy: currentRank - safeAnchorRank,
+                    isDropped: true,
+                    detectedAt: Date.now()
+                };
+            } else {
+                nextEntry = {
+                    ...nextEntry,
+                    anchorRank: safeAnchorRank,
+                    anchorScore: safeAnchorScore,
+                    dropBy: 0,
+                    isDropped: false,
+                    detectedAt: null
+                };
+            }
+
+            if (JSON.stringify(nextEntry) !== JSON.stringify(existing)) {
+                nextGames[gameId] = nextEntry;
+                changed = true;
+            }
+        });
+
+        if (!changed) return;
+        this.rankWatchState = {
+            version: 1,
+            seasonId: seasonId || rankWatch.seasonId || '',
+            updatedAt: Date.now(),
+            games: nextGames
+        };
+        this.persistRankWatchState();
+    }
+
+    getRankWatchEntry(gameId) {
+        const entry = this.rankWatchState?.games?.[gameId];
+        if (!entry || typeof entry !== 'object') return null;
+        const currentRank = Number(entry.currentRank);
+        const anchorRank = Number(entry.anchorRank);
+        const dropBy = Number(entry.dropBy);
+        return {
+            ...entry,
+            currentRank: Number.isFinite(currentRank) && currentRank > 0 ? Math.floor(currentRank) : null,
+            anchorRank: Number.isFinite(anchorRank) && anchorRank > 0 ? Math.floor(anchorRank) : null,
+            dropBy: Number.isFinite(dropBy) && dropBy > 0 ? Math.floor(dropBy) : 0,
+            isDropped: Boolean(entry.isDropped && Number.isFinite(dropBy) && dropBy > 0)
+        };
     }
 
     applyRankingSnapshotToLocal(snapshotGames = {}) {
@@ -847,7 +1049,9 @@ export class GameHub {
                     gameIds: this.games.map((game) => game.id),
                     topLimit: 5
                 });
+                storage.ensureSeasonalState(snapshot?.season?.id, snapshot?.season || null);
                 this.applyRankingSnapshotToLocal(snapshot.games);
+                this.updateRankWatchFromSnapshot(snapshot.games, snapshot.season);
 
                 this.leaderboardState = {
                     ...this.leaderboardState,
@@ -1008,7 +1212,8 @@ export class GameHub {
     getGameLeaderboardSummary(gameId) {
         const gameSnapshot = this.getGameLeaderboardSnapshot(gameId);
         const gameData = storage.getGameData(gameId);
-        const localHighScore = Number(gameData?.highScore || 0);
+        const seasonalEntry = storage.getSeasonalGameEntry(gameId);
+        const localWeeklyHighScore = Number(seasonalEntry?.weeklyHighScore || 0);
         const topScore = Number(gameSnapshot?.top?.[0]?.score || 0);
         const myRank = Number(gameSnapshot?.my?.rank);
         const safeMyRank = Number.isFinite(myRank) && myRank > 0 ? Math.floor(myRank) : null;
@@ -1019,14 +1224,27 @@ export class GameHub {
         const bestRank = safeMyRank && safeStoredBestRank
             ? Math.min(safeMyRank, safeStoredBestRank)
             : (safeMyRank || safeStoredBestRank || null);
-        const myScore = Number(gameSnapshot?.my?.score ?? localHighScore);
+        const myScoreRaw = Number(gameSnapshot?.my?.score ?? localWeeklyHighScore);
+        const myScore = Number.isFinite(myScoreRaw) ? Math.max(0, Math.floor(myScoreRaw)) : 0;
+        const isWeeklyParticipant = localWeeklyHighScore > 0 && safeMyRank !== null;
+        const rankWatch = this.getRankWatchEntry(gameId);
+        const rankDrop = rankWatch && rankWatch.isDropped
+            ? {
+                dropBy: Math.max(1, Number(rankWatch.dropBy || 0)),
+                anchorRank: Number.isFinite(Number(rankWatch.anchorRank)) ? Math.floor(Number(rankWatch.anchorRank)) : null,
+                currentRank: Number.isFinite(Number(rankWatch.currentRank)) ? Math.floor(Number(rankWatch.currentRank)) : null
+            }
+            : null;
 
         return {
             top: Array.isArray(gameSnapshot?.top) ? gameSnapshot.top : [],
             topScore,
             myRank: safeMyRank,
             bestRank,
-            myScore
+            myScore,
+            isWeeklyParticipant,
+            seasonalEntry,
+            rankDrop
         };
     }
 
@@ -1048,10 +1266,20 @@ export class GameHub {
 
         return this.games.map((game) => {
             const ranking = this.getGameLeaderboardSummary(game.id);
-            const myRankDisplay = this.formatLeaderboardRank(ranking.myRank);
+            const isWeeklyParticipant = Boolean(ranking.isWeeklyParticipant);
+            const myRankDisplay = isWeeklyParticipant ? this.formatLeaderboardRank(ranking.myRank) : '-';
             const bestRankDisplay = this.formatLeaderboardRank(ranking.bestRank);
-            const myScoreDisplay = ranking.myScore > 0 ? this.formatNumber(ranking.myScore) : '-';
+            const myScoreDisplay = isWeeklyParticipant && ranking.myScore > 0 ? this.formatNumber(ranking.myScore) : '-';
             const topScoreDisplay = ranking.topScore > 0 ? this.formatNumber(ranking.topScore) : '-';
+            const statusBadges = `
+                <div class="ranking-status-row">
+                    ${!isWeeklyParticipant ? '<span class="ranking-status-badge ranking-status-nonparticipant">금주 미참여</span>' : ''}
+                    ${ranking.rankDrop ? `<span class="ranking-status-badge ranking-status-drop">추월당함 -${ranking.rankDrop.dropBy}위</span>` : ''}
+                </div>
+            `;
+            const rankDropMessage = ranking.rankDrop
+                ? `<div class="ranking-drop-alert">추월당함 -${ranking.rankDrop.dropBy}위 (기준 ${this.formatLeaderboardRank(ranking.rankDrop.anchorRank)} -> 현재 ${this.formatLeaderboardRank(ranking.rankDrop.currentRank)})</div>`
+                : '';
 
             return `
                 <article class="ranking-game-card glass-card" data-game-id="${game.id}" style="--card-color:${game.color};">
@@ -1062,12 +1290,14 @@ export class GameHub {
                             <p class="ranking-game-desc">${game.description}</p>
                         </div>
                     </div>
+                    ${statusBadges}
                     <div class="ranking-game-metrics">
                         <span>내 랭킹 <strong>${myRankDisplay}</strong></span>
                         <span>최고 랭킹 <strong>${bestRankDisplay}</strong></span>
                         <span>내 점수 <strong>${myScoreDisplay}</strong></span>
                         <span>1위 점수 <strong>${topScoreDisplay}</strong></span>
                     </div>
+                    ${rankDropMessage}
                     <ol class="leaderboard-list ranking-mini-list">${this.renderLeaderboardRows(ranking.top.slice(0, 3))}</ol>
                     <div class="ranking-card-actions">
                         <button class="neon-btn" data-action="play">바로 플레이</button>
@@ -1089,6 +1319,7 @@ export class GameHub {
                     </div>
                     <div class="leaderboard-subtext">${leaderboardStatus}</div>
                     ${this.leaderboardState.error ? `<div class="leaderboard-error">${this.leaderboardState.error}</div>` : ''}
+                    ${this.renderCloudAuthControl()}
 
                     <div class="ranking-overview">
                         <article class="leaderboard-card glass-card">
@@ -1467,18 +1698,28 @@ export class GameHub {
             'neon-slotmachine': `
                 (() => {
                     try {
-                        const level = Math.floor(Number(state?.stage || 1));
-                        const score = Math.floor(Number(state?.money || 0));
-                        const stageClears = Math.max(0, level - 1);
-                        const spinChip = Math.max(0, stageClears * 10);
+                        const level = Math.max(1, Math.floor(Number(state?.stage || 1)));
+                        const score = Math.max(0, Math.floor(Number(state?.totalScore ?? state?.money ?? 0)));
+                        const metrics = (window.__mgpSlotMetrics && typeof window.__mgpSlotMetrics === 'object')
+                            ? window.__mgpSlotMetrics
+                            : {};
+                        const stageClears = Math.max(0, Math.floor(Number(metrics.stageClears ?? (level - 1))));
+                        const maxCombo = Math.max(0, Math.floor(Number(metrics.maxCombo ?? state?.combo ?? 0)));
+                        const comboCount = Math.max(0, Math.floor(Number(metrics.comboCount ?? 0)));
+                        const spinChip = Math.max(0, Math.floor(Number(metrics.spins ?? (stageClears * 10))));
+                        const bingo = Math.max(0, Math.floor(Number(metrics.bingo ?? 0)));
+                        const skullBingo = Math.max(0, Math.floor(Number(metrics.skullBingo ?? 0)));
+                        const itemCounts = { spin_chip: spinChip };
+                        if (bingo > 0) itemCounts.bingo = bingo;
+                        if (skullBingo > 0) itemCounts.skull_bingo = skullBingo;
                         return {
                             score,
                             level,
-                            maxCombo: 0,
-                            comboCount: 0,
+                            maxCombo,
+                            comboCount,
                             stageClears,
-                            itemsCollected: spinChip,
-                            itemCounts: { spin_chip: spinChip }
+                            itemsCollected: spinChip + bingo + skullBingo,
+                            itemCounts
                         };
                     } catch (error) {
                         return null;
@@ -1844,20 +2085,32 @@ export class GameHub {
         const profile = storage.getProfile();
         const totals = this.getDashboardTotals();
         const authUser = this.authState.user;
+        const cloudDisabledSection = !this.authState.enabled
+            ? `
+                <div class="profile-auth-note">클라우드 인증이 비활성화되어 있습니다. Firebase 설정을 먼저 입력하세요.</div>
+                <button class="glass-btn" id="profileCloudConfigBtn">클라우드 설정</button>
+            `
+            : '';
 
-        const authSection = !this.authState.enabled
-            ? '<div class="profile-auth-note">클라우드 인증 비활성화 상태입니다.</div>'
-            : this.authState.isSignedIn
-                ? `
-                    <div class="profile-auth-note">연동 계정: ${authUser?.displayName || 'Player'}${authUser?.email ? ` (${authUser.email})` : ''}</div>
+        const profileLoginActions = `
+            <div class="profile-auth-actions">
+                <button class="glass-btn" id="profileGoogleLoginBtn">Google 로그인</button>
+                <button class="glass-btn" id="profileAppleLoginBtn">Apple 로그인</button>
+            </div>
+        `;
+
+        const authSection = this.authState.isSignedIn
+            ? `
+                <div class="profile-auth-note">연동 계정: ${authUser?.displayName || 'Player'}${authUser?.email ? ` (${authUser.email})` : ''}</div>
+                <div class="profile-auth-actions">
                     <button class="glass-btn" id="profileLogoutBtn">로그아웃</button>
-                `
-                : `
-                    <div class="profile-auth-actions">
-                        <button class="glass-btn" id="profileGoogleLoginBtn">Google 로그인</button>
-                        <button class="glass-btn" id="profileAppleLoginBtn">Apple 로그인</button>
-                    </div>
-                `;
+                    <button class="glass-btn" id="profileCloudConfigBtn">클라우드 설정</button>
+                </div>
+            `
+            : `
+                ${cloudDisabledSection}
+                ${profileLoginActions}
+            `;
 
         const modal = document.createElement('div');
         modal.className = 'hub-modal-overlay glass-overlay animate-fadeIn profile-modal';
@@ -1909,6 +2162,10 @@ export class GameHub {
         modal.querySelector('#profileAppleLoginBtn')?.addEventListener('click', async () => {
             await this.handleLoginRequest('apple');
             modal.remove();
+        });
+        modal.querySelector('#profileCloudConfigBtn')?.addEventListener('click', () => {
+            modal.remove();
+            this.showCloudConfigPopup();
         });
         modal.querySelector('#profileLogoutBtn')?.addEventListener('click', async () => {
             await this.handleLogoutRequest();
@@ -1991,8 +2248,13 @@ export class GameHub {
             .ranking-game-title-wrap { min-width:0; }
             .ranking-game-title { margin:0; color:var(--card-color, var(--neon-cyan)); font-size:1rem; }
             .ranking-game-desc { margin:4px 0 0; font-size:0.75rem; color:var(--text-secondary); }
+            .ranking-status-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+            .ranking-status-badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 9px; font-size:0.68rem; font-weight:700; letter-spacing:0.02em; }
+            .ranking-status-nonparticipant { background:rgba(130,140,160,0.2); color:#c7d0de; border:1px solid rgba(170,180,200,0.35); }
+            .ranking-status-drop { background:rgba(255,70,40,0.15); color:#ffd7cf; border:1px solid rgba(255,100,70,0.58); box-shadow:0 0 14px rgba(255,78,48,0.24); animation:rankPulse 1.8s ease-in-out infinite; }
             .ranking-game-metrics { display:flex; flex-wrap:wrap; gap:8px 12px; font-size:0.75rem; color:var(--text-secondary); margin-bottom:10px; }
             .ranking-game-metrics strong { color:var(--text-primary); font-weight:700; }
+            .ranking-drop-alert { font-size:0.75rem; font-weight:700; color:#ffd6cd; border:1px solid rgba(255,110,80,0.5); background:linear-gradient(135deg, rgba(255,90,60,0.2), rgba(185,30,30,0.08)); border-radius:8px; padding:7px 9px; margin-bottom:10px; }
             .ranking-mini-list { margin-bottom:10px; }
             .ranking-card-actions { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
             .game-grid { display:grid; grid-template-columns:1fr; gap:var(--space-4); }
@@ -2041,6 +2303,11 @@ export class GameHub {
             .achievement-item-name { font-weight:700; font-size:0.85rem; color:var(--text-primary); }
             .achievement-item-desc { font-size:0.75rem; color:var(--text-secondary); }
             .achievement-item-points { font-family:var(--font-display); font-size:0.75rem; color:var(--neon-yellow); }
+            @keyframes rankPulse {
+                0% { box-shadow:0 0 0 rgba(255,78,48,0.18); }
+                50% { box-shadow:0 0 18px rgba(255,78,48,0.35); }
+                100% { box-shadow:0 0 0 rgba(255,78,48,0.18); }
+            }
         `;
         document.head.appendChild(style);
     }

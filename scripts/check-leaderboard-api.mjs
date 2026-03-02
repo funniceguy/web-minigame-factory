@@ -46,6 +46,7 @@ async function checkSyncAndSnapshot() {
     const playerId = `check-${Date.now()}`;
     const nickname = 'Checker';
 
+    // Compatibility check: sync without progress payload.
     await requestJson('/api/leaderboard/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,6 +60,56 @@ async function checkSyncAndSnapshot() {
             }
         })
     });
+
+    // New payload check: sync with cloud progress payload.
+    const syncWithProgress = await requestJson('/api/leaderboard/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            playerId,
+            nickname,
+            avatar: 'default',
+            gameScores: {
+                'neon-block': 2234,
+                'neon-survivor': 6678
+            },
+            progress: {
+                profile: {
+                    createdAt: Date.now() - 1000,
+                    totalPlayTime: 360,
+                    totalGamesPlayed: 12,
+                    totalScore: 8900
+                },
+                games: {
+                    'neon-block': {
+                        highScore: 2234,
+                        bestRank: 2,
+                        totalScore: 8000,
+                        playCount: 10,
+                        bestLevel: 7,
+                        bestStage: 7,
+                        maxCombo: 15,
+                        totalComboCount: 80,
+                        totalStageClears: 20,
+                        totalItemsCollected: 45,
+                        itemStats: {
+                            multiball: 5
+                        },
+                        lastSessionScore: 2234,
+                        totalPlayTime: 120,
+                        lastPlayed: Date.now()
+                    }
+                },
+                achievements: {
+                    'neon-block': ['nb_play_1', 'nb_score_3000']
+                }
+            }
+        })
+    });
+
+    if (!syncWithProgress?.player?.progress?.profile) {
+        throw new Error('sync response missing player.progress.profile');
+    }
 
     const snapshot = await requestJson(
         `/api/leaderboard/snapshot?playerId=${encodeURIComponent(playerId)}&gameIds=neon-block,neon-survivor&topLimit=5`

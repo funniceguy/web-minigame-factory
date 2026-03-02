@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEON SLOT MANIA - VEGAS EDITION</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+KR:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+KR:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --neon-blue: #00f3ff;
@@ -27,6 +27,7 @@
             justify-content: center;
             margin: 0;
             overflow: hidden;
+            transition: background 0.5s ease;
         }
 
         .orbitron { font-family: 'Orbitron', sans-serif; }
@@ -38,12 +39,13 @@
             border: 1px solid var(--glass-border);
             border-radius: 24px;
             box-shadow: 0 0 40px rgba(0, 0, 0, 1);
+            transition: all 0.3s ease;
         }
 
         .neon-text-blue { color: var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); }
         .neon-text-pink { color: var(--neon-pink); text-shadow: 0 0 10px var(--neon-pink); }
         .neon-text-red { color: var(--neon-red); text-shadow: 0 0 10px var(--neon-red); }
-        .neon-text-gold { color: var(--neon-gold); text-shadow: 0 0 10px var(--neon-gold); }
+        .neon-text-gold { color: var(--neon-gold); text-shadow: 0 0 15px var(--neon-gold); }
         
         /* Slot Grid */
         .slot-grid {
@@ -53,8 +55,8 @@
         }
 
         .slot-cell {
-            width: 100px;
-            height: 120px;
+            width: clamp(65px, 8vw, 120px);
+            height: clamp(80px, 10vw, 140px);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -66,7 +68,6 @@
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        /* Animations for Winning/Losing */
         .slot-cell.winning {
             background: rgba(255, 0, 255, 0.3);
             border-color: var(--neon-pink);
@@ -95,11 +96,11 @@
         }
 
         .symbol-icon {
-            font-size: 44px;
+            font-size: clamp(28px, 4vw, 54px);
             filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
         }
 
-        /* Buttons */
+        /* Controls */
         .control-btn {
             background: linear-gradient(45deg, var(--neon-blue), var(--neon-purple));
             border: none;
@@ -133,11 +134,48 @@
             font-size: 14px;
         }
 
-        /* Visual Effects */
-        @keyframes spin {
-            0% { transform: translateY(-5px); }
-            100% { transform: translateY(5px); }
+        /* UI Elements */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
         }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--neon-blue);
+            box-shadow: 0 0 10px var(--neon-blue);
+            transition: width 0.3s ease;
+        }
+
+        /* 16:10 Game Board Container */
+        #game-board {
+            aspect-ratio: 16 / 10;
+            width: 100%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 화면 크기에 맞춰 16:10 비율 완벽 대응 */
+        @media (min-aspect-ratio: 16/10) {
+            #game-board {
+                height: 94vh;
+                width: calc(94vh * 1.6);
+            }
+        }
+        @media (max-aspect-ratio: 16/10) {
+            #game-board {
+                width: 94vw;
+                height: calc(94vw / 1.6);
+            }
+        }
+
+        /* Visual Effects */
+        @keyframes spin { 0% { transform: translateY(-5px); } 100% { transform: translateY(5px); } }
         .spinning { animation: spin 0.05s infinite alternate; }
 
         @keyframes screen-shake {
@@ -154,31 +192,53 @@
         }
         .bg-dim { animation: dim-screen 0.3s 2; }
 
-        .progress-container {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-            margin-top: 8px;
+        /* Fever Mode Effects */
+        .fever-active .glass-panel {
+            border-color: var(--neon-gold);
+            box-shadow: 0 0 50px rgba(255, 204, 0, 0.3);
+            background: rgba(255, 204, 0, 0.05);
+        }
+        @keyframes fever-pulse {
+            0% { background: radial-gradient(circle at center, #2a1a00 0%, #000000 100%); }
+            100% { background: radial-gradient(circle at center, #4a2a00 0%, #000000 100%); }
+        }
+        .fever-body { animation: fever-pulse 1s infinite alternate !important; }
+
+        /* Combo Popup */
+        #combo-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-align: center;
+            width: auto;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            border-radius: 20px;
+            border: 2px solid var(--neon-gold);
+            box-shadow: 0 0 50px rgba(255, 204, 0, 0.4);
+        }
+        #combo-display.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
         }
 
-        .progress-bar {
-            height: 100%;
-            background: var(--neon-blue);
-            box-shadow: 0 0 10px var(--neon-blue);
-            transition: width 0.3s ease;
-        }
-
+        /* Toast */
         .message-toast {
             position: fixed;
-            top: 25%;
+            top: 20%;
             left: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px 50px;
+            padding: 15px 40px;
             border-radius: 50px;
             font-weight: bold;
-            font-size: 24px;
+            font-size: 20px;
             display: none;
             z-index: 100;
             pointer-events: none;
@@ -187,66 +247,102 @@
         }
     </style>
 </head>
-<body>
+<body id="body-bg">
 
-    <div id="game-container" class="container max-w-2xl px-4 py-8 relative">
-        <!-- Header: Balance, Stage, Progress -->
-        <div class="glass-panel p-6 mb-6 border-b-2 border-cyan-500/30">
-            <div class="flex flex-wrap justify-between items-end gap-4">
-                <div>
-                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Current Stage</h2>
-                    <div id="stage-display" class="orbitron text-2xl neon-text-blue font-bold">STAGE 1</div>
+    <div id="game-board">
+        <!-- Header: 1 Row Layout (Stage & Score Left / Balance & Target Right) -->
+        <div class="glass-panel px-6 py-4 mb-4 border-b-2 border-cyan-500/30 flex justify-between items-center w-full shrink-0">
+            <!-- Left Section: Stage & Score -->
+            <div class="flex items-center gap-6 lg:gap-10">
+                <div class="flex flex-col">
+                    <h2 class="text-gray-400 text-[10px] lg:text-[12px] uppercase tracking-widest mb-1">Stage (Max 10)</h2>
+                    <div id="stage-display" class="orbitron text-xl sm:text-2xl lg:text-3xl neon-text-blue font-bold whitespace-nowrap">STAGE 1</div>
                 </div>
-                <div class="text-center">
-                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Balance</h2>
-                    <div id="money-display" class="orbitron text-4xl font-bold neon-text-pink">$100</div>
+                <div class="h-10 w-px bg-white/20 hidden sm:block"></div> <!-- 구분선 -->
+                <div class="flex flex-col">
+                    <h2 class="text-gray-400 text-[10px] lg:text-[12px] uppercase tracking-widest mb-1">Total Score</h2>
+                    <div id="score-display" class="orbitron text-xl sm:text-2xl lg:text-3xl neon-text-gold font-bold whitespace-nowrap">0</div>
                 </div>
-                <div class="text-right min-w-[150px]">
-                    <h2 class="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Stage Progress</h2>
-                    <div id="target-display" class="orbitron text-xl text-yellow-400 font-bold">$0 / $1,000</div>
-                    <div class="progress-container">
+            </div>
+
+            <!-- Right Section: Balance & Target -->
+            <div class="flex items-center gap-6 lg:gap-10 text-right">
+                <div class="flex flex-col items-end">
+                    <h2 class="text-gray-400 text-[10px] lg:text-[12px] uppercase tracking-widest mb-1">Balance</h2>
+                    <div id="money-display" class="orbitron text-xl sm:text-2xl lg:text-3xl font-bold neon-text-pink whitespace-nowrap">$100</div>
+                </div>
+                <div class="h-10 w-px bg-white/20 hidden sm:block"></div> <!-- 구분선 -->
+                <div class="flex flex-col items-end min-w-[140px] lg:min-w-[200px]">
+                    <div class="flex justify-between items-end w-full mb-1 gap-4">
+                        <h2 class="text-gray-400 text-[10px] lg:text-[12px] uppercase tracking-widest">Target</h2>
+                        <span id="target-display" class="orbitron text-sm lg:text-lg text-yellow-400 font-bold whitespace-nowrap">0 / 1,000</span>
+                    </div>
+                    <div class="progress-container mt-0 !h-[6px]">
                         <div id="stage-progress" class="progress-bar" style="width: 0%"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        <!-- Main Layout (Sidebar & Slot Panel) -->
+        <div class="flex flex-row gap-6 h-full min-h-0 relative">
+            
             <!-- Sidebar: Controls & Info -->
-            <div class="md:col-span-4 glass-panel p-4 flex flex-col gap-4">
+            <div class="w-1/3 min-w-[250px] glass-panel p-4 flex flex-col gap-3 shrink-0">
                 <div class="text-center">
                     <h3 class="orbitron text-xs text-cyan-400 mb-2">Multipliers (1-10)</h3>
                     <div class="grid grid-cols-3 gap-2" id="multiplier-inputs"></div>
                 </div>
 
-                <div class="border-t border-white/10 pt-4">
-                    <div class="flex justify-between text-[10px] text-gray-400 mb-1">
-                        <span>Base Bet</span>
-                        <span id="base-bet-val" class="text-cyan-400">$10</span>
+                <div class="border-t border-white/10 pt-3">
+                    <!-- ✨ Base Bet 영역을 클릭 가능하도록 버튼화 -->
+                    <div id="reset-bet-btn" class="flex justify-between items-center text-[11px] text-gray-400 mb-1 cursor-pointer hover:text-white hover:bg-white/10 p-1 -mx-1 rounded transition-colors" title="클릭하여 모든 베팅을 1로 초기화">
+                        <span>Base Bet <span class="text-[9px] text-cyan-500 opacity-70 ml-1">(Click to Reset)</span></span>
+                        <span id="base-bet-val" class="text-cyan-400 font-bold orbitron">$10</span>
                     </div>
-                    <div class="flex justify-between text-[11px] font-bold">
-                        <span>SPIN COST</span>
-                        <span id="total-cost-val" class="text-pink-500">$10</span>
+                    <div class="flex justify-between text-[13px] font-bold px-1 mt-1">
+                        <span>TOTAL SPIN COST</span>
+                        <span id="total-cost-val" class="text-pink-500 orbitron">$10</span>
                     </div>
                 </div>
 
-                <div class="text-[9px] text-gray-500 space-y-1 bg-black/40 p-2 rounded">
-                    <p class="text-white/70 font-bold mb-1 underline">PAYOUTS</p>
-                    <p>• 🍎/🍋/🍒: 2 pts | 🔔: 5 pts | 7️⃣: 10 pts</p>
-                    <p class="text-red-400 font-bold">• 💀 해골: -3 pts (최대 5개)</p>
+                <!-- 잭팟 피버 게이지 -->
+                <div class="border-t border-white/10 pt-3">
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-yellow-400 orbitron tracking-wider">FEVER GAUGE</span>
+                        <span id="fever-text" class="text-yellow-400 orbitron">0%</span>
+                    </div>
+                    <div class="progress-container !bg-yellow-900/30 !h-[10px]">
+                        <div id="fever-bar" class="progress-bar !bg-yellow-400 !shadow-[0_0_10px_#ffcc00]" style="width: 0%"></div>
+                    </div>
+                    <p id="fever-desc" class="text-[9px] text-gray-400 mt-1 text-right">게이지 100% 달성 시 무적 모드 발동!</p>
+                </div>
+
+                <div class="text-[8px] lg:text-[9px] text-gray-500 space-y-1 bg-black/40 p-2 rounded mt-auto">
+                    <p class="text-white/80 font-bold mb-1 underline">PAYOUT RULES</p>
+                    <p>• 🍎/🍋/🍒: x2 | 🔔: x5 | 7️⃣: x10</p>
+                    <p class="text-red-400 font-bold">• 💀 해골: -x3 (최대 5개 등장)</p>
+                    <p class="text-yellow-400 font-bold mt-1">• 연속 승리 시 콤보 배율 적용! (최대 x5)</p>
                     <div class="mt-2 py-1 px-2 border border-dashed border-cyan-800 rounded">
-                        <p class="text-cyan-400 font-bold" id="luck-desc">리스크 분석: 보통</p>
+                        <p class="text-cyan-400 font-bold text-[10px]" id="luck-desc">리스크 분석: 보통</p>
                     </div>
                 </div>
             </div>
 
             <!-- Main: Slot Machine -->
-            <div class="md:col-span-8 glass-panel p-8 flex flex-col items-center relative overflow-hidden">
-                <div class="slot-grid mb-8" id="game-grid"></div>
+            <div class="flex-grow glass-panel p-8 flex flex-col items-center justify-center relative" id="main-slot-panel">
+                
+                <!-- 콤보 이펙트 팝업 -->
+                <div id="combo-display" class="orbitron">
+                    <h2 class="text-5xl font-black italic neon-text-gold mb-1" id="combo-count-text">2 COMBO!</h2>
+                    <p class="text-2xl font-bold text-white drop-shadow-lg" id="combo-mult-text">x1.5 PAYOUT</p>
+                </div>
 
-                <div class="flex flex-col items-center gap-4 w-full">
-                    <button id="spin-btn" class="control-btn w-full text-xl orbitron py-4">SPIN</button>
-                    <div id="status-msg" class="text-center h-6 text-sm orbitron text-cyan-400">READY</div>
+                <div class="slot-grid mb-8 mt-auto" id="game-grid"></div>
+
+                <div class="flex flex-col items-center gap-4 w-full max-w-sm mt-auto">
+                    <button id="spin-btn" class="control-btn w-full text-2xl orbitron py-4 tracking-widest">SPIN</button>
+                    <div id="status-msg" class="text-center h-6 text-sm orbitron text-cyan-400 font-bold tracking-widest">READY</div>
                 </div>
             </div>
         </div>
@@ -257,10 +353,17 @@
 
     <!-- Game Over / Stage Clear Overlay -->
     <div id="overlay" class="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center hidden z-50">
-        <div class="glass-panel p-10 text-center border-2 border-cyan-500 max-w-sm mx-4">
-            <h2 id="overlay-title" class="orbitron text-4xl mb-4 neon-text-blue">GAME OVER</h2>
-            <p id="overlay-msg" class="mb-8 text-gray-300">자금이 부족합니다.</p>
-            <button id="overlay-btn" class="control-btn px-10 py-3">RETRY</button>
+        <div class="glass-panel p-10 text-center border-2 border-cyan-500 max-w-md mx-4 w-full">
+            <h2 id="overlay-title" class="orbitron text-5xl mb-4 neon-text-blue font-black tracking-wider">GAME OVER</h2>
+            <p id="overlay-msg" class="mb-6 text-gray-300 text-sm">자금이 부족합니다.</p>
+            
+            <div id="overlay-score-container" class="mb-8 py-5 border border-dashed border-yellow-500/50 rounded-xl bg-yellow-500/10 hidden">
+                <h3 class="text-xs text-yellow-500 uppercase tracking-widest mb-2 font-bold">Final Score</h3>
+                <p id="overlay-score" class="orbitron text-4xl font-black neon-text-gold">0</p>
+                <p id="overlay-rank" class="mt-3 text-lg font-bold text-white hidden">RANK: <span class="text-pink-500">A</span></p>
+            </div>
+
+            <button id="overlay-btn" class="control-btn px-10 py-4 w-full text-xl tracking-widest">RETRY</button>
         </div>
     </div>
 
@@ -286,24 +389,30 @@
             tick: () => playSound(880, 'triangle', 0.05, 0.05),
             spin: () => playSound(110, 'sawtooth', 0.1, 0.03),
             win: () => {
-                const notes = [523.25, 659.25, 783.99, 1046.50]; // C-E-G-C arpeggio
-                notes.forEach((n, i) => {
-                    setTimeout(() => playSound(n, 'square', 0.2, 0.05), i * 100);
-                });
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((n, i) => { setTimeout(() => playSound(n, 'square', 0.2, 0.05), i * 100); });
             },
+            feverWin: () => {
+                const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98];
+                notes.forEach((n, i) => { setTimeout(() => playSound(n, 'square', 0.15, 0.08), i * 80); });
+            },
+            combo: () => playSound(1318.51, 'sine', 0.3, 0.1),
             clear: () => {
                 const fanfare = [523.25, 523.25, 523.25, 698.46, 880.00];
-                fanfare.forEach((n, i) => {
-                    setTimeout(() => playSound(n, 'square', 0.3, 0.05), i * 150);
-                });
+                fanfare.forEach((n, i) => { setTimeout(() => playSound(n, 'square', 0.3, 0.05), i * 150); });
             },
             gameOver: () => {
                 const sad = [392.00, 349.23, 311.13, 261.63];
-                sad.forEach((n, i) => {
-                    setTimeout(() => playSound(n, 'sawtooth', 0.5, 0.05, false), i * 300);
-                });
+                sad.forEach((n, i) => { setTimeout(() => playSound(n, 'sawtooth', 0.5, 0.05, false), i * 300); });
             }
         };
+
+        // --- Number Formatting Helper ---
+        // 숫자를 축약하지 않고 천 단위 콤마(,)와 함께 그대로 표시합니다.
+        function formatNumber(num) {
+            if (num === 0) return "0";
+            return Math.floor(num).toLocaleString();
+        }
 
         // --- Configuration ---
         const SYMBOLS = ['🍎', '🍋', '🍒', '🔔', '7️⃣', '💀'];
@@ -313,14 +422,20 @@
             [0, 3, 6], [1, 4, 7], [2, 5, 8],
             [0, 4, 8], [2, 4, 6]
         ];
+        const MAX_STAGE = 10;
 
         // --- Game State ---
         let state = {
             money: 100,
+            totalScore: 0,
             stage: 1,
             target: 1000,
             stageEarned: 0,
             baseBet: 10,
+            combo: 0,           // 연속 승리 횟수
+            feverGauge: 0,      // 피버 게이지 (0~100)
+            isFever: false,     // 피버 모드 상태
+            feverSpins: 0,      // 남은 피버 스핀 수
             isSpinning: false,
             isStageCleared: false,
             isBingoOccurredThisStage: false, 
@@ -329,8 +444,81 @@
             currentSlots: Array(9).fill('❓')
         };
 
+        const mgpMetrics = {
+            startedAt: Date.now(),
+            sent: false,
+            stageClears: 0,
+            maxCombo: 0,
+            comboCount: 0,
+            spins: 0,
+            bingo: 0,
+            skullBingo: 0
+        };
+
+        function resetMgpMetrics() {
+            mgpMetrics.startedAt = Date.now();
+            mgpMetrics.sent = false;
+            mgpMetrics.stageClears = 0;
+            mgpMetrics.maxCombo = 0;
+            mgpMetrics.comboCount = 0;
+            mgpMetrics.spins = 0;
+            mgpMetrics.bingo = 0;
+            mgpMetrics.skullBingo = 0;
+        }
+
+        function updateMgpLiveMetrics() {
+            mgpMetrics.maxCombo = Math.max(mgpMetrics.maxCombo, Math.max(0, Math.floor(Number(state.combo || 0))));
+        }
+
+        function buildMgpSnapshot() {
+            updateMgpLiveMetrics();
+
+            const score = Math.max(0, Math.floor(Number(state.totalScore || 0)));
+            const level = Math.max(1, Math.floor(Number(state.stage || 1)));
+            const spinChip = Math.max(0, Math.floor(Number(mgpMetrics.spins || 0)));
+            const bingo = Math.max(0, Math.floor(Number(mgpMetrics.bingo || 0)));
+            const skullBingo = Math.max(0, Math.floor(Number(mgpMetrics.skullBingo || 0)));
+            const itemCounts = { spin_chip: spinChip };
+            if (bingo > 0) itemCounts.bingo = bingo;
+            if (skullBingo > 0) itemCounts.skull_bingo = skullBingo;
+
+            return {
+                score,
+                level,
+                maxCombo: Math.max(0, Math.floor(Number(mgpMetrics.maxCombo || 0))),
+                comboCount: Math.max(0, Math.floor(Number(mgpMetrics.comboCount || 0))),
+                stageClears: Math.max(0, Math.floor(Number(mgpMetrics.stageClears || 0))),
+                itemsCollected: spinChip + bingo + skullBingo,
+                itemCounts,
+                duration: Math.max(1, Math.floor((Date.now() - mgpMetrics.startedAt) / 1000))
+            };
+        }
+
+        function postMgpResult(force = false) {
+            if (mgpMetrics.sent && !force) return;
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        source: 'mgp-game',
+                        type: 'result',
+                        payload: buildMgpSnapshot()
+                    }, '*');
+                }
+            } catch (error) {
+                console.warn('Failed to post slot result message:', error);
+            }
+            mgpMetrics.sent = true;
+        }
+
+        window.__mgpSnapshot = () => ({ ...buildMgpSnapshot() });
+        window.__mgpSlotMetrics = mgpMetrics;
+        window.addEventListener('beforeunload', () => postMgpResult(true));
+
         const elements = {
+            body: document.getElementById('body-bg'),
+            mainPanel: document.getElementById('main-slot-panel'),
             stage: document.getElementById('stage-display'),
+            score: document.getElementById('score-display'),
             money: document.getElementById('money-display'),
             target: document.getElementById('target-display'),
             progress: document.getElementById('stage-progress'),
@@ -341,18 +529,29 @@
             totalCostVal: document.getElementById('total-cost-val'),
             statusMsg: document.getElementById('status-msg'),
             luckDesc: document.getElementById('luck-desc'),
+            comboDisplay: document.getElementById('combo-display'),
+            comboCountText: document.getElementById('combo-count-text'),
+            comboMultText: document.getElementById('combo-mult-text'),
+            feverText: document.getElementById('fever-text'),
+            feverBar: document.getElementById('fever-bar'),
+            feverDesc: document.getElementById('fever-desc'),
             toast: document.getElementById('toast'),
             overlay: document.getElementById('overlay'),
             overlayTitle: document.getElementById('overlay-title'),
             overlayMsg: document.getElementById('overlay-msg'),
+            overlayScore: document.getElementById('overlay-score'),
+            overlayRank: document.getElementById('overlay-rank'),
+            overlayScoreContainer: document.getElementById('overlay-score-container'),
             overlayBtn: document.getElementById('overlay-btn'),
-            container: document.getElementById('game-container')
+            container: document.getElementById('game-board')
         };
 
-        // --- Initialization ---
+        // --- Initialization & Stage Scaling ---
         function init() {
-            state.baseBet = Math.max(1, Math.floor(state.stage * 10)); 
-            state.target = state.stage * 500;
+            // 하이 리스크 하이 리턴 밸런싱 (기하급수적 상승)
+            state.baseBet = Math.floor(10 * Math.pow(1.8, state.stage - 1)); 
+            state.target = Math.floor(1000 * Math.pow(2.5, state.stage - 1));
+            
             state.stageEarned = 0;
             state.isStageCleared = false;
             state.isBingoOccurredThisStage = false; 
@@ -421,32 +620,50 @@
         }
 
         function updateLuckDescription() {
+            if (state.isFever) {
+                elements.luckDesc.textContent = "🔥 FEVER MODE ACTIVE! (무적/2배) 🔥";
+                elements.luckDesc.className = "text-yellow-400 font-black animate-pulse text-[11px]";
+                return;
+            }
+
             const totalMult = state.multipliers.reduce((a, b) => a + b, 0);
             const riskLevel = totalMult / 90;
 
             if (state.isSkullBingoOccurred) {
                 if (riskLevel > 0.6) {
-                    elements.luckDesc.textContent = "복구 모드: 고베팅 리스크 감지!";
-                    elements.luckDesc.className = "text-orange-400 font-bold";
+                    elements.luckDesc.textContent = "위험: 하이 리스크 베팅 감지!";
+                    elements.luckDesc.className = "text-orange-400 font-bold text-[10px]";
                 } else {
-                    elements.luckDesc.textContent = "복구 모드: 안전 보상 가동 중";
-                    elements.luckDesc.className = "text-yellow-400 font-bold";
+                    elements.luckDesc.textContent = "보통: 안전 보상 가동 중";
+                    elements.luckDesc.className = "text-yellow-400 font-bold text-[10px]";
                 }
             } else {
                 if (riskLevel > 0.8) {
-                    elements.luckDesc.textContent = "리스크 분석: 매우 높음 (💀UP)";
-                    elements.luckDesc.className = "text-red-500 font-bold";
+                    elements.luckDesc.textContent = "리스크 분석: 극도로 높음 (💀 파산 주의)";
+                    elements.luckDesc.className = "text-red-500 font-bold text-[10px]";
                 } else if (riskLevel > 0.4) {
-                    elements.luckDesc.textContent = "리스크 분석: 보통";
-                    elements.luckDesc.className = "text-cyan-400 font-bold";
+                    elements.luckDesc.textContent = "리스크 분석: 보통 (균형잡힌 투자)";
+                    elements.luckDesc.className = "text-cyan-400 font-bold text-[10px]";
                 } else {
-                    elements.luckDesc.textContent = "리스크 분석: 안전";
-                    elements.luckDesc.className = "text-blue-400 font-bold";
+                    elements.luckDesc.textContent = "리스크 분석: 안전 (로우 리스크)";
+                    elements.luckDesc.className = "text-blue-400 font-bold text-[10px]";
                 }
             }
         }
 
         function getWeightedSymbol(currentSkullCount) {
+            // ✨ 피버 모드일 경우 해골 확률 0, 고급 심볼 확률 대폭 증가!
+            if (state.isFever) {
+                const feverWeights = { '🍎': 10, '🍋': 10, '🍒': 10, '🔔': 40, '7️⃣': 30, '💀': 0 };
+                const totalW = Object.values(feverWeights).reduce((a, b) => a + b, 0);
+                let rnd = Math.random() * totalW;
+                for (let sym in feverWeights) {
+                    if (rnd < feverWeights[sym]) return sym;
+                    rnd -= feverWeights[sym];
+                }
+                return '7️⃣';
+            }
+
             const progress = state.stageEarned / state.target;
             const totalMult = state.multipliers.reduce((a, b) => a + b, 0);
             const betWeightFactor = (totalMult - 9) / 81; 
@@ -487,19 +704,39 @@
             const minBet = state.baseBet;
 
             elements.stage.textContent = `STAGE ${state.stage}`;
-            elements.money.textContent = `$${Math.floor(state.money).toLocaleString()}`;
-            elements.target.textContent = `$${Math.floor(state.stageEarned).toLocaleString()} / $${state.target.toLocaleString()}`;
+            // ✨ 점수는 PTS 없이, 숫자는 축약 없이 전체 숫자로 표시
+            elements.score.textContent = `${formatNumber(state.totalScore)}`;
+            elements.money.textContent = `$${formatNumber(state.money)}`;
+            elements.target.textContent = `${formatNumber(state.stageEarned)} / ${formatNumber(state.target)}`;
             
             const progressPercent = Math.min(100, (state.stageEarned / state.target) * 100);
             elements.progress.style.width = `${progressPercent}%`;
-            elements.baseBetVal.textContent = `$${state.baseBet}`;
-            elements.totalCostVal.textContent = `$${currentCost}`;
+            elements.baseBetVal.textContent = `$${formatNumber(state.baseBet)}`;
+            elements.totalCostVal.textContent = `$${formatNumber(currentCost)}`;
 
+            // ✨ 피버 게이지 및 상태 업데이트
+            elements.feverBar.style.width = `${state.feverGauge}%`;
+            elements.feverText.textContent = `${Math.floor(state.feverGauge)}%`;
+            if (state.isFever) {
+                elements.feverText.textContent = `🔥 ${state.feverSpins} SPINS LEFT 🔥`;
+                elements.feverText.classList.add('animate-pulse');
+                elements.body.classList.add('fever-body');
+                elements.mainPanel.parentElement.classList.add('fever-active');
+                elements.feverDesc.textContent = "무적 모드 가동 중! 보상 2배!";
+            } else {
+                elements.feverText.classList.remove('animate-pulse');
+                elements.body.classList.remove('fever-body');
+                elements.mainPanel.parentElement.classList.remove('fever-active');
+                elements.feverDesc.textContent = "게이지 100% 달성 시 무적 모드 발동!";
+            }
+
+            // 게임 오버 체크 (비회전 시)
             if (state.money < minBet && !state.isSpinning) {
                 elements.spinBtn.disabled = true;
                 elements.statusMsg.textContent = "GAME OVER";
                 sounds.gameOver();
-                showOverlay("GAME OVER", "자금이 부족하여 더 이상 게임을 지속할 수 없습니다.", "RETRY");
+                postMgpResult();
+                showOverlay("BANKRUPT", "자금이 모두 소진되었습니다. 파산!", "RETRY", true);
                 return;
             }
 
@@ -512,13 +749,23 @@
                 }
             } else {
                 elements.spinBtn.disabled = state.isSpinning;
-                if (!state.isSpinning) elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY READY" : "READY";
+                if (!state.isSpinning) {
+                    if (state.isFever) elements.statusMsg.textContent = "🔥 FEVER SPIN 🔥";
+                    else elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY READY" : "READY";
+                }
             }
 
+            // 스테이지 클리어 또는 최종 클리어 체크
             if (state.stageEarned >= state.target && !state.isSpinning && !state.isStageCleared) {
                 state.isStageCleared = true;
+                mgpMetrics.stageClears += 1;
                 sounds.clear();
-                showOverlay("STAGE CLEAR", "목표 금액을 달성했습니다!", "NEXT STAGE");
+                if (state.stage >= MAX_STAGE) {
+                    postMgpResult();
+                    showOverlay("🎊 ALL CLEAR 🎊", "축하합니다! 라스베가스를 정복했습니다!", "PLAY AGAIN", true, true);
+                } else {
+                    showOverlay("STAGE CLEAR", "목표 금액을 달성했습니다! 다음 스테이지로 이동합니다.", "NEXT STAGE", false);
+                }
             }
         }
 
@@ -526,31 +773,48 @@
             return new Promise(resolve => {
                 const startMoney = state.money;
                 const startStageEarned = state.stageEarned;
+                const startScore = state.totalScore;
+                
+                const scoreWon = wonAmount > 0 ? wonAmount * 10 : 0; 
+
                 let current = 0;
                 const isLoss = wonAmount < 0;
                 const absWon = Math.max(1, Math.abs(wonAmount));
 
+                // 큰 금액 획득 시 애니메이션 속도를 빠르게 조절
+                let step = Math.max(1, Math.ceil(absWon / 30));
+
                 function animate() {
-                    const progress = current / absWon;
-                    let step = Math.max(1, Math.floor(absWon * 0.1 * (progress + 0.1)));
                     current += step;
 
                     if (current >= absWon) {
                         state.money = startMoney + wonAmount;
                         state.stageEarned = Math.max(0, startStageEarned + wonAmount);
+                        if (!isLoss) state.totalScore = startScore + scoreWon; 
                         updateDisplays();
                         resolve();
                     } else {
                         const tick = isLoss ? -current : current;
                         state.money = startMoney + tick;
                         state.stageEarned = Math.max(0, startStageEarned + tick);
-                        sounds.tick();
+                        if (!isLoss) state.totalScore = startScore + (current * 10);
+                        if (current % (step * 2) < step) sounds.tick(); // 사운드 빈도 조절
                         updateDisplays();
                         requestAnimationFrame(animate);
                     }
                 }
                 requestAnimationFrame(animate);
             });
+        }
+
+        function triggerComboUI(multiplier) {
+            elements.comboCountText.textContent = `${state.combo} COMBO!`;
+            elements.comboMultText.textContent = `x${multiplier} PAYOUT`;
+            elements.comboDisplay.classList.add('show');
+            sounds.combo();
+            setTimeout(() => {
+                elements.comboDisplay.classList.remove('show');
+            }, 1200);
         }
 
         async function spin() {
@@ -561,9 +825,16 @@
 
             state.isSpinning = true;
             state.money -= cost;
+            mgpMetrics.spins += 1;
+            
+            if (state.isFever) {
+                state.feverSpins--;
+                // ✨ 버그 수정: 여기서 isFever를 바로 false로 만들지 않음 (현재 5번째 스핀까지는 혜택 적용)
+            }
+
             updateDisplays();
             
-            elements.statusMsg.textContent = state.isSkullBingoOccurred ? "RECOVERY SPINNING..." : "SPINNING...";
+            elements.statusMsg.textContent = state.isFever ? "🔥 FEVER SPINNING... 🔥" : "SPINNING...";
             sounds.spin();
 
             const cells = document.querySelectorAll('.slot-cell');
@@ -587,6 +858,11 @@
                 
                 await checkWins();
                 
+                // ✨ 스핀과 상금 처리가 모두 끝난 후 피버 모드 해제
+                if (state.isFever && state.feverSpins <= 0) {
+                    state.isFever = false;
+                }
+                
                 state.isSpinning = false;
                 updateDisplays();
             }, 800);
@@ -608,7 +884,7 @@
                     const symbol = state.currentSlots[a];
                     const baseScore = SYMBOL_SCORES[symbol];
                     const lineMultiplier = state.multipliers[line[0]] + state.multipliers[line[1]] + state.multipliers[line[2]];
-                    const delta = Math.floor(baseScore * state.baseBet * lineMultiplier);
+                    let delta = Math.floor(baseScore * state.baseBet * lineMultiplier);
                     
                     totalDelta += delta;
                     if (symbol === '💀') {
@@ -619,8 +895,40 @@
                 }
             });
 
+            // ✨ 승리 시 콤보 및 피버 적용
+            if (totalDelta > 0) {
+                state.combo++;
+                mgpMetrics.comboCount += 1;
+                updateMgpLiveMetrics();
+                
+                // 콤보 보너스 계산 (1콤보=1x, 2콤보=1.5x, 3콤보=2.0x ... 최대 5x)
+                let comboBonus = 1 + ((state.combo - 1) * 0.5);
+                comboBonus = Math.min(comboBonus, 5); // 콤보 배율 최대 5배 제한
+
+                // 피버 모드면 기본 보상 2배 추가
+                let finalMult = comboBonus * (state.isFever ? 2 : 1);
+                totalDelta = Math.floor(totalDelta * finalMult);
+
+                if (state.combo >= 2) triggerComboUI(comboBonus);
+
+                // 피버 게이지 충전 (승리 라인 수 + 획득금액 비례)
+                if (!state.isFever) {
+                    const fillAmount = (winningLines.length * 5) + Math.min(10, totalDelta / state.baseBet);
+                    state.feverGauge = Math.min(100, state.feverGauge + fillAmount);
+                    if (state.feverGauge >= 100) {
+                        state.isFever = true;
+                        state.feverSpins = 5;
+                        state.feverGauge = 0;
+                    }
+                }
+            } else if (totalDelta <= 0 && state.currentSlots[0] !== '❓') {
+                state.combo = 0; // 이익을 못보면 콤보 즉시 초기화 (해골이거나 무승부)
+            }
+
             if (skullBingoFound || regularBingoFound) {
                 state.isBingoOccurredThisStage = true;
+                if (winningLines.length > 0) mgpMetrics.bingo += winningLines.length;
+                if (losingLines.length > 0) mgpMetrics.skullBingo += losingLines.length;
                 if (skullBingoFound) {
                     state.isSkullBingoOccurred = true; 
                     updateLuckDescription();
@@ -628,12 +936,12 @@
 
                 if (totalDelta > 0) {
                     elements.container.classList.add('shake');
-                    showToast(`WIN +$${totalDelta}`, 'var(--neon-pink)');
-                    sounds.win();
+                    showToast(`WIN +$${formatNumber(totalDelta)}`, 'var(--neon-pink)');
+                    state.isFever ? sounds.feverWin() : sounds.win();
                     winningLines.flat().forEach(idx => document.getElementById(`cell-${idx}`).classList.add('winning'));
                 } else if (totalDelta < 0) {
                     elements.container.classList.add('bg-dim');
-                    showToast(`LOSS $${Math.abs(totalDelta)}`, 'var(--neon-red)');
+                    showToast(`LOSS -$${formatNumber(Math.abs(totalDelta))}`, 'var(--neon-red)');
                     losingLines.flat().forEach(idx => document.getElementById(`cell-${idx}`).classList.add('losing'));
                 }
                 
@@ -650,19 +958,48 @@
             setTimeout(() => elements.toast.style.display = 'none', 1500);
         }
 
-        function showOverlay(title, msg, btnText) {
+        function showOverlay(title, msg, btnText, isGameOver = false, isAllClear = false) {
             elements.overlayTitle.textContent = title;
+            elements.overlayTitle.className = isAllClear ? "orbitron text-5xl mb-4 neon-text-gold font-black tracking-wider" : "orbitron text-5xl mb-4 neon-text-blue font-black tracking-wider";
             elements.overlayMsg.textContent = msg;
             elements.overlayBtn.textContent = btnText;
+            
+            if (isGameOver) {
+                elements.overlayScore.textContent = `${formatNumber(state.totalScore)}`;
+                
+                // 최종 점수에 따른 랭크 부여
+                elements.overlayRank.classList.remove('hidden');
+                let rankHTML = "";
+                if (state.totalScore > 50000000) rankHTML = `RANK: <span class="text-yellow-400 drop-shadow-[0_0_10px_#ffcc00]">SSS (GOD)</span>`;
+                else if (state.totalScore > 10000000) rankHTML = `RANK: <span class="text-pink-500">SS (LEGEND)</span>`;
+                else if (state.totalScore > 1000000) rankHTML = `RANK: <span class="text-purple-400">S (MASTER)</span>`;
+                else if (state.totalScore > 100000) rankHTML = `RANK: <span class="text-cyan-400">A (PRO)</span>`;
+                else if (state.totalScore > 10000) rankHTML = `RANK: <span class="text-green-400">B (EXPERT)</span>`;
+                else rankHTML = `RANK: <span class="text-gray-400">C (GAMBLER)</span>`;
+                elements.overlayRank.innerHTML = rankHTML;
+
+                elements.overlayScoreContainer.style.display = 'block';
+            } else {
+                elements.overlayScoreContainer.style.display = 'none';
+                elements.overlayRank.classList.add('hidden');
+            }
+            
             elements.overlay.classList.remove('hidden');
         }
 
         elements.overlayBtn.onclick = () => {
-            if (elements.overlayBtn.textContent === "RETRY") {
-                state.money = 100; state.stage = 1;
+            if (elements.overlayBtn.textContent === "RETRY" || elements.overlayBtn.textContent === "PLAY AGAIN") {
+                state.money = 100; 
+                state.stage = 1;
+                state.totalScore = 0;
+                state.combo = 0;
+                state.feverGauge = 0;
+                state.isFever = false;
                 state.currentSlots = Array(9).fill('❓');
+                resetMgpMetrics();
             } else {
                 state.stage++;
+                state.combo = 0; // 스테이지 넘어가면 콤보 리셋
                 state.currentSlots = Array(9).fill('❓');
             }
             elements.overlay.classList.add('hidden');
@@ -671,7 +1008,27 @@
 
         elements.spinBtn.onclick = spin;
 
-        window.onload = init;
+        // ✨ Spacebar 스핀 단축키 및 Base Bet 초기화 이벤트 추가
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // 스페이스바로 화면이 아래로 내려가는 현상 방지
+                if (!state.isSpinning && !elements.spinBtn.disabled && elements.overlay.classList.contains('hidden')) {
+                    spin();
+                }
+            }
+        });
+
+        document.getElementById('reset-bet-btn').addEventListener('click', () => {
+            if (!state.isSpinning) {
+                resetMultipliersToMinimum();
+                sounds.tick(); // 초기화 시 사운드 피드백
+            }
+        });
+
+        window.onload = () => {
+            resetMgpMetrics();
+            init();
+        };
     </script>
 </body>
 </html>

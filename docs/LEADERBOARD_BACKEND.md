@@ -28,9 +28,38 @@ Optional env:
 
 - `GET /api/health`
 - `POST /api/leaderboard/sync`
-  - body: `{ playerId, nickname, avatar, gameScores }`
+  - body: `{ playerId, nickname, avatar, gameScores, progress? }`
+  - `gameScores` is **weekly-only high score map** (current KST week), not all-time highs
+  - `progress` shape:
+    - `profile`: `{ createdAt, totalPlayTime, totalGamesPlayed, totalScore }`
+    - `games`: `{ [gameId]: { highScore, bestRank, totalScore, playCount, bestLevel, bestStage, maxCombo, totalComboCount, totalStageClears, totalItemsCollected, itemStats, lastSessionScore, totalPlayTime, lastPlayed } }`
+    - `achievements`: `{ [gameId]: string[] }`
+  - response player payload:
+    - `{ uid, overallScore, progress }`
 - `GET /api/leaderboard/snapshot?playerId=...&gameIds=game1,game2&topLimit=5`
 - `GET /api/leaderboard/events` (SSE realtime updates)
+
+## Progress Merge Policy
+
+Server and client use conservative merge rules during sync:
+
+- Profile totals (`totalPlayTime`, `totalGamesPlayed`, `totalScore`): `max(local, cloud)`
+- Game metrics (`highScore`, `totalScore`, `playCount`, `bestLevel`, `bestStage`, `maxCombo`, `totalComboCount`, `totalStageClears`, `totalItemsCollected`, `totalPlayTime`): `max(local, cloud)`
+- `bestRank`: minimum positive rank
+- `lastPlayed`: max timestamp
+- `lastSessionScore`: value from the side with newer `lastPlayed` (ties use max)
+- `itemStats`: per-item `max(local, cloud)`
+- `achievements`: union without duplicates
+
+Storage format version is now `2` and keeps player `progress` in `data/leaderboard-store.json`.  
+Legacy `version:1` files are normalized at load time.
+
+## Weekly-Only Ranking Behavior
+
+- Weekly reset remains `KST Monday 09:00`
+- Clients only upload weekly play highs (`gameScores`) for the active week
+- If a user has not played a game this week, that game is excluded from sync payload
+- All-time progression (`progress`, achievements, cumulative stats) is still preserved and synced
 
 ## Deployment
 

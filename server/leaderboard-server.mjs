@@ -21,6 +21,11 @@ const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 const KST_OFFSET_MS = 9 * HOUR_MS;
 const KST_RESET_HOUR = 9;
+const STORE_VERSION = 2;
+const MAX_PROGRESS_GAMES = 200;
+const MAX_ITEM_STATS_PER_GAME = 200;
+const MAX_ACHIEVEMENT_GAMES = 200;
+const MAX_ACHIEVEMENTS_PER_GAME = 256;
 
 const MIME_MAP = {
     '.html': 'text/html; charset=utf-8',
@@ -72,6 +77,349 @@ function sanitizeId(value, fallback = '') {
     return base.replace(/[^a-zA-Z0-9_\-:.]/g, '').slice(0, 96);
 }
 
+function sanitizeRank(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    const rank = Math.floor(parsed);
+    return rank > 0 ? rank : null;
+}
+
+function sortObjectByKey(source = {}) {
+    const sorted = {};
+    Object.keys(source)
+        .sort((a, b) => String(a).localeCompare(String(b), 'en'))
+        .forEach((key) => {
+            sorted[key] = source[key];
+        });
+    return sorted;
+}
+
+function hasMeaningfulGameProgress(gameProgress = {}) {
+    if (!gameProgress || typeof gameProgress !== 'object') return false;
+    if (toSafeScore(gameProgress.highScore) > 0) return true;
+    if (sanitizeRank(gameProgress.bestRank) !== null) return true;
+    if (toSafeScore(gameProgress.totalScore) > 0) return true;
+    if (toSafeScore(gameProgress.playCount) > 0) return true;
+    if (toSafeScore(gameProgress.bestLevel) > 1) return true;
+    if (toSafeScore(gameProgress.bestStage) > 1) return true;
+    if (toSafeScore(gameProgress.maxCombo) > 0) return true;
+    if (toSafeScore(gameProgress.totalComboCount) > 0) return true;
+    if (toSafeScore(gameProgress.totalStageClears) > 0) return true;
+    if (toSafeScore(gameProgress.totalItemsCollected) > 0) return true;
+    if (toSafeScore(gameProgress.lastSessionScore) > 0) return true;
+    if (toSafeScore(gameProgress.totalPlayTime) > 0) return true;
+    if (toSafeTimestamp(gameProgress.lastPlayed, 0) > 0) return true;
+    return Object.keys(gameProgress.itemStats || {}).length > 0;
+}
+
+function sanitizeItemStats(source = {}) {
+    if (!source || typeof source !== 'object') return {};
+
+    const result = {};
+    let count = 0;
+    Object.entries(source).forEach(([rawItemId, rawCount]) => {
+        if (count >= MAX_ITEM_STATS_PER_GAME) return;
+        const itemId = sanitizeId(rawItemId);
+        const itemCount = toSafeScore(rawCount);
+        if (!itemId || itemCount <= 0) return;
+        result[itemId] = itemCount;
+        count += 1;
+    });
+
+    return sortObjectByKey(result);
+}
+
+function sanitizeGameProgress(rawGame = {}) {
+    const safeGame = rawGame && typeof rawGame === 'object' ? rawGame : {};
+    return {
+        highScore: toSafeScore(safeGame.highScore),
+        bestRank: sanitizeRank(safeGame.bestRank),
+        totalScore: toSafeScore(safeGame.totalScore),
+        playCount: toSafeScore(safeGame.playCount),
+        bestLevel: Math.max(1, toSafeScore(safeGame.bestLevel || 1)),
+        bestStage: Math.max(1, toSafeScore(safeGame.bestStage || 1)),
+        maxCombo: toSafeScore(safeGame.maxCombo),
+        totalComboCount: toSafeScore(safeGame.totalComboCount),
+        totalStageClears: toSafeScore(safeGame.totalStageClears),
+        totalItemsCollected: toSafeScore(safeGame.totalItemsCollected),
+        itemStats: sanitizeItemStats(safeGame.itemStats),
+        lastSessionScore: toSafeScore(safeGame.lastSessionScore),
+        totalPlayTime: toSafeScore(safeGame.totalPlayTime),
+        lastPlayed: toSafeTimestamp(safeGame.lastPlayed, 0)
+    };
+}
+
+function sanitizeGamesProgress(sourceGames = {}, fallbackGameScores = {}) {
+    const safeGames = sourceGames && typeof sourceGames === 'object' ? sourceGames : {};
+    const safeFallbackScores = fallbackGameScores && typeof fallbackGameScores === 'object'
+        ? fallbackGameScores
+        : {};
+
+    const result = {};
+    let count = 0;
+
+    Object.entries(safeGames).forEach(([rawGameId, rawGame]) => {
+        if (count >= MAX_PROGRESS_GAMES) return;
+        const gameId = sanitizeId(rawGameId);
+        if (!gameId) return;
+        const normalizedGame = sanitizeGameProgress(rawGame);
+        if (!hasMeaningfulGameProgress(normalizedGame)) return;
+
+        result[gameId] = normalizedGame;
+        count += 1;
+    });
+
+    Object.entries(safeFallbackScores).forEach(([rawGameId, rawScore]) => {
+        if (count >= MAX_PROGRESS_GAMES) return;
+        const gameId = sanitizeId(rawGameId);
+        const score = toSafeScore(rawScore);
+        if (!gameId || score <= 0 || result[gameId]) return;
+
+        result[gameId] = sanitizeGameProgress({
+            highScore: score,
+            totalScore: score,
+            lastSessionScore: score
+        });
+        count += 1;
+    });
+
+    return sortObjectByKey(result);
+}
+
+function sanitizeAchievementsProgress(sourceAchievements = {}) {
+    if (!sourceAchievements || typeof sourceAchievements !== 'object') return {};
+
+    const result = {};
+    let gameCount = 0;
+    Object.entries(sourceAchievements).forEach(([rawGameId, rawAchievementIds]) => {
+        if (gameCount >= MAX_ACHIEVEMENT_GAMES) return;
+
+        const gameId = sanitizeId(rawGameId);
+        if (!gameId || !Array.isArray(rawAchievementIds)) return;
+
+        const uniqueAchievementIds = new Set();
+        rawAchievementIds.forEach((rawAchievementId) => {
+            if (uniqueAchievementIds.size >= MAX_ACHIEVEMENTS_PER_GAME) return;
+            const achievementId = sanitizeId(rawAchievementId);
+            if (!achievementId) return;
+            uniqueAchievementIds.add(achievementId);
+        });
+
+        if (uniqueAchievementIds.size === 0) return;
+        result[gameId] = Array.from(uniqueAchievementIds)
+            .sort((a, b) => String(a).localeCompare(String(b), 'en'));
+        gameCount += 1;
+    });
+
+    return sortObjectByKey(result);
+}
+
+function sanitizeProfileProgress(rawProfile = {}, fallbackProfile = {}, fallbackCreatedAt = Date.now()) {
+    const safeProfile = rawProfile && typeof rawProfile === 'object' ? rawProfile : {};
+    const safeFallback = fallbackProfile && typeof fallbackProfile === 'object' ? fallbackProfile : {};
+
+    const createdAtSource = safeProfile.createdAt ?? safeFallback.createdAt;
+    const createdAt = toSafeTimestamp(createdAtSource, toSafeTimestamp(fallbackCreatedAt, Date.now()));
+
+    return {
+        createdAt,
+        totalPlayTime: Math.max(
+            toSafeScore(safeProfile.totalPlayTime),
+            toSafeScore(safeFallback.totalPlayTime)
+        ),
+        totalGamesPlayed: Math.max(
+            toSafeScore(safeProfile.totalGamesPlayed),
+            toSafeScore(safeFallback.totalGamesPlayed)
+        ),
+        totalScore: Math.max(
+            toSafeScore(safeProfile.totalScore),
+            toSafeScore(safeFallback.totalScore)
+        )
+    };
+}
+
+function sanitizeProgress(rawProgress = {}, options = {}) {
+    const safeProgress = rawProgress && typeof rawProgress === 'object' ? rawProgress : {};
+    const fallbackGameScores = options?.fallbackGameScores && typeof options.fallbackGameScores === 'object'
+        ? options.fallbackGameScores
+        : {};
+    const fallbackProfile = options?.fallbackProfile && typeof options.fallbackProfile === 'object'
+        ? options.fallbackProfile
+        : {};
+    const fallbackCreatedAt = options?.fallbackCreatedAt ?? Date.now();
+
+    return {
+        profile: sanitizeProfileProgress(safeProgress.profile, fallbackProfile, fallbackCreatedAt),
+        games: sanitizeGamesProgress(safeProgress.games, fallbackGameScores),
+        achievements: sanitizeAchievementsProgress(safeProgress.achievements)
+    };
+}
+
+function mergeCreatedAt(localCreatedAt, incomingCreatedAt, fallback = Date.now()) {
+    const safeLocal = toSafeTimestamp(localCreatedAt, 0);
+    const safeIncoming = toSafeTimestamp(incomingCreatedAt, 0);
+    if (safeLocal > 0 && safeIncoming > 0) {
+        return Math.min(safeLocal, safeIncoming);
+    }
+    if (safeLocal > 0) return safeLocal;
+    if (safeIncoming > 0) return safeIncoming;
+    return toSafeTimestamp(fallback, Date.now());
+}
+
+function mergeProfileProgress(localProfile = {}, incomingProfile = {}) {
+    const safeLocal = sanitizeProfileProgress(localProfile);
+    const safeIncoming = sanitizeProfileProgress(incomingProfile);
+    return {
+        createdAt: mergeCreatedAt(safeLocal.createdAt, safeIncoming.createdAt),
+        totalPlayTime: Math.max(safeLocal.totalPlayTime, safeIncoming.totalPlayTime),
+        totalGamesPlayed: Math.max(safeLocal.totalGamesPlayed, safeIncoming.totalGamesPlayed),
+        totalScore: Math.max(safeLocal.totalScore, safeIncoming.totalScore)
+    };
+}
+
+function mergeBestRank(localRank, incomingRank) {
+    const safeLocal = sanitizeRank(localRank);
+    const safeIncoming = sanitizeRank(incomingRank);
+    if (safeLocal && safeIncoming) return Math.min(safeLocal, safeIncoming);
+    return safeLocal || safeIncoming || null;
+}
+
+function mergeItemStats(localStats = {}, incomingStats = {}) {
+    const safeLocal = sanitizeItemStats(localStats);
+    const safeIncoming = sanitizeItemStats(incomingStats);
+    const merged = {};
+
+    const itemIds = new Set([
+        ...Object.keys(safeLocal),
+        ...Object.keys(safeIncoming)
+    ]);
+
+    Array.from(itemIds)
+        .sort((a, b) => String(a).localeCompare(String(b), 'en'))
+        .slice(0, MAX_ITEM_STATS_PER_GAME)
+        .forEach((itemId) => {
+            const nextValue = Math.max(
+                toSafeScore(safeLocal[itemId]),
+                toSafeScore(safeIncoming[itemId])
+            );
+            if (nextValue > 0) {
+                merged[itemId] = nextValue;
+            }
+        });
+
+    return merged;
+}
+
+function mergeSingleGameProgress(localGame = {}, incomingGame = {}) {
+    const safeLocal = sanitizeGameProgress(localGame);
+    const safeIncoming = sanitizeGameProgress(incomingGame);
+
+    const localLastPlayed = toSafeTimestamp(safeLocal.lastPlayed, 0);
+    const incomingLastPlayed = toSafeTimestamp(safeIncoming.lastPlayed, 0);
+
+    let lastSessionScore = 0;
+    if (localLastPlayed > incomingLastPlayed) {
+        lastSessionScore = toSafeScore(safeLocal.lastSessionScore);
+    } else if (incomingLastPlayed > localLastPlayed) {
+        lastSessionScore = toSafeScore(safeIncoming.lastSessionScore);
+    } else {
+        lastSessionScore = Math.max(
+            toSafeScore(safeLocal.lastSessionScore),
+            toSafeScore(safeIncoming.lastSessionScore)
+        );
+    }
+
+    return {
+        highScore: Math.max(safeLocal.highScore, safeIncoming.highScore),
+        bestRank: mergeBestRank(safeLocal.bestRank, safeIncoming.bestRank),
+        totalScore: Math.max(safeLocal.totalScore, safeIncoming.totalScore),
+        playCount: Math.max(safeLocal.playCount, safeIncoming.playCount),
+        bestLevel: Math.max(safeLocal.bestLevel, safeIncoming.bestLevel),
+        bestStage: Math.max(safeLocal.bestStage, safeIncoming.bestStage),
+        maxCombo: Math.max(safeLocal.maxCombo, safeIncoming.maxCombo),
+        totalComboCount: Math.max(safeLocal.totalComboCount, safeIncoming.totalComboCount),
+        totalStageClears: Math.max(safeLocal.totalStageClears, safeIncoming.totalStageClears),
+        totalItemsCollected: Math.max(safeLocal.totalItemsCollected, safeIncoming.totalItemsCollected),
+        itemStats: mergeItemStats(safeLocal.itemStats, safeIncoming.itemStats),
+        lastSessionScore,
+        totalPlayTime: Math.max(safeLocal.totalPlayTime, safeIncoming.totalPlayTime),
+        lastPlayed: Math.max(localLastPlayed, incomingLastPlayed)
+    };
+}
+
+function mergeGamesProgress(localGames = {}, incomingGames = {}) {
+    const safeLocal = sanitizeGamesProgress(localGames);
+    const safeIncoming = sanitizeGamesProgress(incomingGames);
+
+    const merged = {};
+    const gameIds = new Set([
+        ...Object.keys(safeLocal),
+        ...Object.keys(safeIncoming)
+    ]);
+
+    Array.from(gameIds)
+        .sort((a, b) => String(a).localeCompare(String(b), 'en'))
+        .slice(0, MAX_PROGRESS_GAMES)
+        .forEach((gameId) => {
+            const mergedGame = mergeSingleGameProgress(
+                safeLocal[gameId] || {},
+                safeIncoming[gameId] || {}
+            );
+
+            if (hasMeaningfulGameProgress(mergedGame)) {
+                merged[gameId] = mergedGame;
+            }
+        });
+
+    return merged;
+}
+
+function mergeAchievementsProgress(localAchievements = {}, incomingAchievements = {}) {
+    const safeLocal = sanitizeAchievementsProgress(localAchievements);
+    const safeIncoming = sanitizeAchievementsProgress(incomingAchievements);
+
+    const merged = {};
+    const gameIds = new Set([
+        ...Object.keys(safeLocal),
+        ...Object.keys(safeIncoming)
+    ]);
+
+    Array.from(gameIds)
+        .sort((a, b) => String(a).localeCompare(String(b), 'en'))
+        .slice(0, MAX_ACHIEVEMENT_GAMES)
+        .forEach((gameId) => {
+            const mergedSet = new Set([
+                ...(safeLocal[gameId] || []),
+                ...(safeIncoming[gameId] || [])
+            ]);
+            if (mergedSet.size === 0) return;
+            merged[gameId] = Array.from(mergedSet)
+                .sort((a, b) => String(a).localeCompare(String(b), 'en'))
+                .slice(0, MAX_ACHIEVEMENTS_PER_GAME);
+        });
+
+    return merged;
+}
+
+function mergePlayerProgress(localProgress = {}, incomingProgress = {}, options = {}) {
+    const safeLocal = sanitizeProgress(localProgress, {
+        fallbackGameScores: options?.localFallbackGameScores,
+        fallbackProfile: options?.localFallbackProfile,
+        fallbackCreatedAt: options?.fallbackCreatedAt
+    });
+    const safeIncoming = sanitizeProgress(incomingProgress, {
+        fallbackGameScores: options?.incomingFallbackGameScores,
+        fallbackProfile: options?.incomingFallbackProfile,
+        fallbackCreatedAt: options?.fallbackCreatedAt
+    });
+
+    return {
+        profile: mergeProfileProgress(safeLocal.profile, safeIncoming.profile),
+        games: mergeGamesProgress(safeLocal.games, safeIncoming.games),
+        achievements: mergeAchievementsProgress(safeLocal.achievements, safeIncoming.achievements)
+    };
+}
+
 function computeKstSeasonWindow(nowMs = Date.now()) {
     const kstNowMs = nowMs + KST_OFFSET_MS;
     const kstNow = new Date(kstNowMs);
@@ -106,7 +454,7 @@ function computeKstSeasonWindow(nowMs = Date.now()) {
 
 function createEmptyState(nowMs = Date.now()) {
     return {
-        version: 1,
+        version: STORE_VERSION,
         revision: 1,
         updatedAt: nowMs,
         season: computeKstSeasonWindow(nowMs),
@@ -161,13 +509,24 @@ class LeaderboardStore {
                 gameScores[gameId] = score;
             });
 
+            const legacyTotalScore = Object.values(gameScores).reduce((sum, score) => sum + toSafeScore(score), 0);
+            const progress = sanitizeProgress(rawPlayer.progress, {
+                fallbackGameScores: gameScores,
+                fallbackProfile: {
+                    createdAt: rawPlayer?.createdAt,
+                    totalScore: legacyTotalScore
+                },
+                fallbackCreatedAt: toSafeTimestamp(rawPlayer.updatedAt, Date.now())
+            });
+
             normalizedPlayers[uid] = {
                 uid,
                 nickname: sanitizeString(rawPlayer.nickname, 'Player', 32),
                 avatar: sanitizeString(rawPlayer.avatar, 'default', 32),
                 updatedAt: toSafeTimestamp(rawPlayer.updatedAt),
                 gameScores,
-                overallScore: Object.values(gameScores).reduce((sum, score) => sum + toSafeScore(score), 0)
+                overallScore: legacyTotalScore,
+                progress
             };
         });
 
@@ -177,7 +536,7 @@ class LeaderboardStore {
         };
 
         return {
-            version: 1,
+            version: STORE_VERSION,
             revision: Math.max(1, Math.floor(Number(raw?.revision || 1))),
             updatedAt: toSafeTimestamp(raw?.updatedAt, fallback.updatedAt),
             season: {
@@ -196,7 +555,7 @@ class LeaderboardStore {
         if (this.state?.season?.id === latestSeason.id) return false;
 
         this.state = {
-            version: 1,
+            version: STORE_VERSION,
             revision: (Number(this.state?.revision) || 1) + 1,
             updatedAt: Date.now(),
             season: latestSeason,
@@ -250,7 +609,7 @@ class LeaderboardStore {
         });
     }
 
-    syncPlayer({ playerId, nickname, avatar, gameScores }) {
+    syncPlayer({ playerId, nickname, avatar, gameScores, progress }) {
         this.ensureActiveSeason();
 
         const uid = sanitizeId(playerId);
@@ -272,7 +631,10 @@ class LeaderboardStore {
             avatar: safeAvatar,
             updatedAt: Date.now(),
             gameScores: {},
-            overallScore: 0
+            overallScore: 0,
+            progress: sanitizeProgress(null, {
+                fallbackCreatedAt: Date.now()
+            })
         };
 
         let hasMeaningfulChange = false;
@@ -299,13 +661,39 @@ class LeaderboardStore {
             hasMeaningfulChange = true;
         }
 
+        const nextProgress = mergePlayerProgress(existing.progress, progress, {
+            localFallbackGameScores: existing.gameScores,
+            incomingFallbackGameScores: sourceGameScores,
+            localFallbackProfile: {
+                createdAt: existing?.progress?.profile?.createdAt ?? existing.updatedAt,
+                totalScore: existing.overallScore
+            },
+            incomingFallbackProfile: {
+                createdAt: Date.now(),
+                totalScore: overallScore
+            },
+            fallbackCreatedAt: Date.now()
+        });
+        const normalizedExistingProgress = sanitizeProgress(existing.progress, {
+            fallbackGameScores: existing.gameScores,
+            fallbackProfile: {
+                createdAt: existing?.progress?.profile?.createdAt ?? existing.updatedAt,
+                totalScore: existing.overallScore
+            },
+            fallbackCreatedAt: Date.now()
+        });
+        if (JSON.stringify(normalizedExistingProgress) !== JSON.stringify(nextProgress)) {
+            hasMeaningfulChange = true;
+        }
+
         this.state.players[uid] = {
             uid,
             nickname: safeNickname,
             avatar: safeAvatar,
             updatedAt: Date.now(),
             gameScores: nextGameScores,
-            overallScore
+            overallScore,
+            progress: nextProgress
         };
 
         if (hasMeaningfulChange) {
@@ -319,6 +707,7 @@ class LeaderboardStore {
         return {
             playerId: uid,
             overallScore,
+            progress: nextProgress,
             hasMeaningfulChange,
             season: this.state.season,
             revision: this.state.revision
@@ -550,7 +939,8 @@ async function handleApiRequest(req, res, url) {
             playerId: payload?.playerId,
             nickname: payload?.nickname,
             avatar: payload?.avatar,
-            gameScores: payload?.gameScores
+            gameScores: payload?.gameScores,
+            progress: payload?.progress
         });
 
         sendJson(res, 200, {
@@ -560,7 +950,8 @@ async function handleApiRequest(req, res, url) {
             season: result.season,
             player: {
                 uid: result.playerId,
-                overallScore: result.overallScore
+                overallScore: result.overallScore,
+                progress: result.progress
             }
         });
         return;

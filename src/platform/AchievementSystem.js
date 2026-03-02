@@ -46,14 +46,16 @@ export class AchievementSystem {
         this.register('neon-slotmachine', [
             { id: 'ns_play_1', name: 'First Spin', desc: 'Play 1 time', icon: '*', points: 5, metric: 'playCount', threshold: 1 },
             { id: 'ns_play_15', name: 'Spin Addict', desc: 'Play 15 times', icon: '*', points: 14, metric: 'playCount', threshold: 15 },
-            { id: 'ns_high_3000', name: 'Cash Lift', desc: 'High score 3,000', icon: '*', points: 14, metric: 'highScore', threshold: 3000 },
-            { id: 'ns_high_9000', name: 'High Roller', desc: 'High score 9,000', icon: '*', points: 26, metric: 'highScore', threshold: 9000 },
+            { id: 'ns_high_30000', name: 'Cash Lift', desc: 'High score 30,000', icon: '*', points: 14, metric: 'highScore', threshold: 30000 },
+            { id: 'ns_high_90000', name: 'High Roller', desc: 'High score 90,000', icon: '*', points: 26, metric: 'highScore', threshold: 90000 },
             { id: 'ns_stage_10', name: 'Stage Investor', desc: 'Total stage clears 10', icon: '*', points: 20, metric: 'totalStageClears', threshold: 10 },
-            { id: 'ns_item_spin_120', name: 'Chip Grinder', desc: 'Collect spin chip 120', icon: '*', points: 18, metric: 'item.spin_chip', threshold: 120 },
-            { id: 'ns_item_bingo_30', name: 'Line Hunter', desc: 'Bingo line 30', icon: '*', points: 20, metric: 'item.bingo', threshold: 30 },
-            { id: 'ns_item_skull_5', name: 'Skull Survivor', desc: 'Skull bingo 5', icon: '*', points: 18, metric: 'item.skull_bingo', threshold: 5 },
-            { id: 'ns_total_score_50000', name: 'Casino Veteran', desc: 'Total score 50,000', icon: '*', points: 32, metric: 'totalScore', threshold: 50000 },
-            { id: 'ns_best_stage_12', name: 'Stage Climber', desc: 'Best stage 12', icon: '*', points: 24, metric: 'bestStage', threshold: 12 }
+            { id: 'ns_item_spin_120', name: 'Chip Grinder', desc: 'Collect spin chip 200', icon: '*', points: 18, metric: 'item.spin_chip', threshold: 200 },
+            { id: 'ns_item_bingo_30', name: 'Line Hunter', desc: 'Bingo line 40', icon: '*', points: 20, metric: 'item.bingo', threshold: 40 },
+            { id: 'ns_item_skull_5', name: 'Skull Survivor', desc: 'Skull bingo 10', icon: '*', points: 18, metric: 'item.skull_bingo', threshold: 10 },
+            { id: 'ns_combo_8', name: 'Combo Voltage', desc: 'Max combo 8', icon: '*', points: 18, metric: 'maxCombo', threshold: 8 },
+            { id: 'ns_combo_total_120', name: 'Combo Accountant', desc: 'Total combo 120', icon: '*', points: 22, metric: 'totalComboCount', threshold: 120 },
+            { id: 'ns_total_score_500000', name: 'Casino Veteran', desc: 'Total score 500,000', icon: '*', points: 32, metric: 'totalScore', threshold: 500000 },
+            { id: 'ns_best_stage_10', name: 'Stage Climber', desc: 'Best stage 10', icon: '*', points: 24, metric: 'bestStage', threshold: 10 }
         ]);
 
         this.register('neon-survivor', [

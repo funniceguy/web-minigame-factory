@@ -315,15 +315,13 @@ export class LeaderboardService {
     }
 
     buildGameHighScoresMap() {
-        const allGameStats = storage.getAllGameStats() || {};
+        const seasonalHighScores = storage.getSeasonalHighScoresMap() || {};
         const highScores = {};
-
-        Object.entries(allGameStats).forEach(([gameId, gameData]) => {
-            const highScore = toSafeScore(gameData?.highScore);
-            if (!gameId || highScore <= 0) return;
-            highScores[gameId] = highScore;
+        Object.entries(seasonalHighScores).forEach(([gameId, score]) => {
+            const safeScore = toSafeScore(score);
+            if (!gameId || safeScore <= 0) return;
+            highScores[gameId] = safeScore;
         });
-
         return highScores;
     }
 
@@ -457,11 +455,13 @@ export class LeaderboardService {
 
         const player = this.resolvePlayerProfile();
         const gameScores = this.buildGameHighScoresMap();
+        const progress = storage.getCloudProgressSnapshot();
         const payload = {
             playerId: player.uid,
             nickname: player.nickname,
             avatar: player.avatar,
-            gameScores
+            gameScores,
+            progress
         };
 
         this.syncInFlight = this.requestJson('/api/leaderboard/sync', {
@@ -469,6 +469,14 @@ export class LeaderboardService {
             body: payload
         })
             .then((result) => {
+                if (result?.player?.progress) {
+                    try {
+                        storage.mergeCloudProgress(result.player.progress);
+                    } catch (error) {
+                        console.warn('Failed to merge cloud progress payload:', error);
+                    }
+                }
+
                 this.setSource('server');
                 this.lastSyncAt = Date.now();
                 this.lastSyncResult = {
